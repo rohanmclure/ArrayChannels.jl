@@ -11,10 +11,8 @@ addprocs(4)
     end
 end
 
-triggered = false
-
 @everywhere function deserialize(s::AbstractSerializer, t::Type{<:Custom})
-    global triggered = true
+    println("Yeah boiii!")
     invoke(deserialize, Tuple{AbstractSerializer, DataType}, s,t)
 end
 
@@ -22,6 +20,4 @@ rc = @fetchfrom 2 global c = RemoteChannel(()->Channel{Custom}(1))
 val = Custom()
 
 put!(rc,val)
-take!(rc)
-
-println(triggered)
+println(take!(rc).x)
