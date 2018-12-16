@@ -1,3 +1,6 @@
+# Rohan McLure 2019 (C), Australian National University, licensed under MIT.
+# Import me using @everywhere - we will later permit changing of workerpools
+
 using Distributed
 import Distributed: RRID, WorkerPool
 
@@ -5,18 +8,20 @@ using Serialization
 using Serialization: AbstractSerializer, serialize, deserialize
 import Serialization: serialize, deserialize
 
+# Serialisation / Deserialisation of InPlaceArrays will involve a deep copy to a preallocated buffer
+
 mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
     src :: Array{T,N} # Reference to array, never overwritten.
     rrid :: RRID
 
 	function InPlaceArray{T,N}(A::Array{T,N}) where {T,N}
-		out = new(A, RRID()) # Need this to associate with the InPlaceArray
+	out = new(A, RRID()) # Need this to associate with the InPlaceArray
 		@sync for proc in workers()
 			@async remotecall_wait(proc, out.rrid, out.src) do reference, payload
 				buffers[reference] = payload # May instead point to the array.
 			end
 		end
-        out::InPlaceArray{T,N}
+	out::InPlaceArray{T,N}
     end
 end
 
