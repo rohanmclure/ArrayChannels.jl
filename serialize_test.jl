@@ -1,6 +1,6 @@
 @everywhere include("Test.jl")
 
-X = Custom(10,20)
+X = Custom([10,15],20)
 
 writer = IOBuffer()
 println(typeof(writer))

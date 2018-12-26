@@ -7,7 +7,7 @@ import Serialization: serialize, deserialize
 import Base: size, show, getindex
 
 mutable struct Custom
-    send_me :: Int
+    send_me :: Vector{Int}
     dont_send_me :: Union{Int, Nothing}
 
     function Custom(x,y)

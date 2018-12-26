@@ -58,11 +58,13 @@ function serialize(S::AbstractSerializer, A::InPlaceArray)
     writetag(S.io, Serialization.OBJECT_TAG)
     serialize(S, typeof(A))
     serialize(S, A.src)
+    serialize(S, A.rrid)
 end
 
 function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where {T,N}
-    x = deserialize(S)
-    InPlaceArray()
+    payload = deserialize(S):: Array{T,N}
+    id = deserialize(S)     :: RRID
+    println(payload)
 end
 
 # InPlaceArray{T}(A::Array{T,1}) where {T} = InPlaceArray{T,1}(A)
