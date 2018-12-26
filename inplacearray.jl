@@ -62,6 +62,7 @@ end
 
 function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where {T,N}
     x = deserialize(S)
+    InPlaceArray()
 end
 
 # InPlaceArray{T}(A::Array{T,1}) where {T} = InPlaceArray{T,1}(A)

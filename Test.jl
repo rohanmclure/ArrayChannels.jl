@@ -8,7 +8,7 @@ import Base: size, show, getindex
 
 mutable struct Custom
     send_me :: Int
-    dont_send_me :: Int
+    dont_send_me :: Union{Int, Nothing}
 
     function Custom(x,y)
         new(x,y)
@@ -16,7 +16,7 @@ mutable struct Custom
 end
 
 function serialize(S::AbstractSerializer, C::Custom)
-    writetag(S.io, Serialisation.OBJECT_TAG)
+    writetag(S.io, Serialization.OBJECT_TAG)
     serialize(S, typeof(C)) # Serialize the actual type object
     serialize(S, C.send_me)
 end
