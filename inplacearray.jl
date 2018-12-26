@@ -5,7 +5,7 @@ using Distributed
 import Distributed: RRID, WorkerPool
 
 using Serialization
-using Serialization: AbstractSerializer, serialize, deserialize
+using Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag
 import Serialization: serialize, deserialize
 
 import Base: size, show, getindex
@@ -41,7 +41,6 @@ function show(S::IO, mime::MIME"text/plain", A::InPlaceArray)
 end
 
 function getindex(I::InPlaceArray, key...)
-    println("Debugging this boii")
     getindex(I.src, key...)
 end
 
@@ -53,13 +52,16 @@ function get_from(RRID::RRID, worker)
     return @fetchfrom worker buffers[RRID]
 end
 
-function serialize(s::AbstractSerializer, t::InPlaceArray)
-    println("Lol we got there")
+function serialize(S::AbstractSerializer, A::InPlaceArray)
+    @assert A isa InPlaceArray
+
+    writetag(S.io, Serialization.OBJECT_TAG)
+    serialize(S, typeof(A))
+    serialize(S, A.src)
 end
 
-function deserialize(s::AbstractSerializer, t::Type{<:InPlaceArray})
-    println("Yeah boiii!")
-    invoke(deserialize, Tuple{AbstractSerializer, DataType}, s,t)terminal
+function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where {T,N}
+    x = deserialize(S)
 end
 
 # InPlaceArray{T}(A::Array{T,1}) where {T} = InPlaceArray{T,1}(A)
