@@ -1,23 +1,27 @@
 using Distributed
-addprocs(4)
-@sync @everywhere using Serialization: AbstractSerializer, serialize, deserialize
-@sync @everywhere import Serialization: serialize, deserialize
 
-@everywhere mutable struct Custom
-    x :: Int
+using Serialization
+using Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag
+import Serialization: serialize, deserialize
 
-    function Custom()
-        new(5::Int)
+import Base: size, show, getindex
+
+mutable struct Custom
+    send_me :: Vector{Int}
+    dont_send_me :: Union{Int, Nothing}
+
+    function Custom(x,y)
+        new(x,y)
     end
 end
 
-@everywhere function deserialize(s::AbstractSerializer, t::Type{<:Custom})
-    println("Yeah boiii!")
-    invoke(deserialize, Tuple{AbstractSerializer, DataType}, s,t)
+function serialize(S::AbstractSerializer, C::Custom)
+    writetag(S.io, Serialization.OBJECT_TAG)
+    serialize(S, typeof(C)) # Serialize the actual type object
+    serialize(S, C.send_me)
 end
 
-rc = @fetchfrom 2 global c = RemoteChannel(()->Channel{Custom}(1))
-val = Custom()
-
-put!(rc,val)
-println(take!(rc).x)
+function deserialize(S::AbstractSerializer, t::Type{<:Custom})
+    x = deserialize(S)
+    Custom(x, nothing)
+end
