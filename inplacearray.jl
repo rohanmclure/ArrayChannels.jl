@@ -5,7 +5,11 @@ using Distributed
 import Distributed: RRID, WorkerPool
 
 using Serialization
+<<<<<<< HEAD
 using Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag
+=======
+using Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag, deserialize_fillarray!
+>>>>>>> no-allocate
 import Serialization: serialize, deserialize
 
 import Base: size, show, getindex
@@ -57,6 +61,7 @@ function serialize(S::AbstractSerializer, A::InPlaceArray)
 
     writetag(S.io, Serialization.OBJECT_TAG)
     serialize(S, typeof(A))
+<<<<<<< HEAD
     serialize(S, A.src)
     serialize(S, A.rrid)
 end
@@ -69,6 +74,72 @@ end
 
 # InPlaceArray{T}(A::Array{T,1}) where {T} = InPlaceArray{T,1}(A)
 # InPlaceArray{T}(A::Array{T,2}) where {T} = InPlaceArray{T,2}(A)
+=======
+    # Serialise the rrid before the payload array
+    serialize(S, A.rrid)
+    serialize(S, A.src)
+end
+
+function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where {T,N}
+    # Remote reference which references this 'array' uniquely
+    id = deserialize(S)     :: RRID
+
+    # Read the object tag for the array. Forces following lines to deserialise components of array,
+    # rather than full array. We need this for granular control.
+    read(S.io, UInt8)::UInt8
+
+    # Deserialise an array but pop it in place
+    slot = S.counter; S.counter += 1
+    d1 = deserialize(S)
+    if isa(d1, Type)
+        elty = d1
+        d1 = deserialize(S)
+    else
+        elty = UInt8
+    end
+    if isa(d1, Integer)
+        if elty !== Bool && isbitstype(elty)
+            a = Vector{elty}(undef, d1)
+            S.table[slot] = a
+            return read!(S.io, a)
+        end
+        dims = (Int(d1),)
+    else
+        dims = convert(Dims, d1)::Dims
+    end
+    local A
+    if isbitstype(elty)
+        n = prod(dims)::Int
+        if elty === Bool && n > 0
+            A = buffers[id]
+            # A = Array{Bool, length(dims)}(undef, dims)
+            i = 1
+            while i <= n
+                b = read(S.io, UInt8)::UInt8
+                v = (b >> 7) != 0
+                count = b & 0x7f
+                nxt = i + count
+                while i < nxt
+                    A[i] = v
+                    i += 1
+                end
+            end
+        else
+            A = read!(S.io, buffers[id])
+        end
+        S.table[slot] = A
+    else
+        # A = Array{elty, length(dims)}(undef, dims)
+        A = buffers[id]
+        S.table[slot] = A
+        # sizehint!(S.table, S.counter + div(length(A),4)) # I reckon not necessary
+        deserialize_fillarray!(A, S)
+    end
+
+    # Actual return type of deserialise:
+    return nothing # Cannot construct new InPlaceArray as would have another RRID
+end
+>>>>>>> no-allocate
 
 InPlaceArray(A::Array{T,N}) where {T,N} = InPlaceArray{T,N}(A)
 
