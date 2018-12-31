@@ -5,11 +5,7 @@ using Distributed
 import Distributed: RRID, WorkerPool
 
 using Serialization
-<<<<<<< HEAD
-using Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag
-=======
 using Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag, deserialize_fillarray!
->>>>>>> no-allocate
 import Serialization: serialize, deserialize
 
 import Base: size, show, getindex
@@ -61,20 +57,6 @@ function serialize(S::AbstractSerializer, A::InPlaceArray)
 
     writetag(S.io, Serialization.OBJECT_TAG)
     serialize(S, typeof(A))
-<<<<<<< HEAD
-    serialize(S, A.src)
-    serialize(S, A.rrid)
-end
-
-function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where {T,N}
-    payload = deserialize(S):: Array{T,N}
-    id = deserialize(S)     :: RRID
-    println(payload)
-end
-
-# InPlaceArray{T}(A::Array{T,1}) where {T} = InPlaceArray{T,1}(A)
-# InPlaceArray{T}(A::Array{T,2}) where {T} = InPlaceArray{T,2}(A)
-=======
     # Serialise the rrid before the payload array
     serialize(S, A.rrid)
     serialize(S, A.src)
@@ -139,7 +121,6 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
     # Actual return type of deserialise:
     return nothing # Cannot construct new InPlaceArray as would have another RRID
 end
->>>>>>> no-allocate
 
 InPlaceArray(A::Array{T,N}) where {T,N} = InPlaceArray{T,N}(A)
 

@@ -1,10 +1,5 @@
 @everywhere include("inplacearray.jl")
 
-<<<<<<< HEAD
-X = InPlaceArray([1 2; 3 4; 5 6])
-
-@fetchfrom 2 X
-=======
 @everywhere function lookup(id)
     return buffers[id]
 end
@@ -32,4 +27,3 @@ end
 
 # Got the saved copy of the InPlaceArray
 println(A)
->>>>>>> no-allocate
