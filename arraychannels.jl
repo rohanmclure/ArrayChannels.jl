@@ -1,45 +1,44 @@
 # Rohan McLure, 2018
 
-mutable struct ArrayChannel{AT} <: AbstractChannel{AT} where AT <: Array{T}
+using Base
+import Base: AbstractChannel, put!, take!
 
+# Currently a synchronous buffer for in-place communication of array data.
+mutable struct ArrayChannel{T,N} <: AbstractChannel where {T,N}
     cond_take::Condition
     cond_put::Condition
-    buffers::Vector{AT}
-    sz_max::Integer
-    current_sz::Integer
-
-    # Constructor accepting floats for size
-    function ArrayChannel{AT}(sz::Float64, dims::NTuple{Int64}) where AT <: Array{T}
-        if sz == Inf
-            ArrayChannel{AT}(typemax(Int), dims)
-        else
-            ArrayChannel{AT}(convert(Int,sz), dims)
-        end
-    end
+    buffer::InPlaceArray{T,N}
 
     # Main constructor
-    function ArrayChannel{AT})(sz::Integer, dims::NTuple{Int64}) where AT <: Array{T}
-        if sz <= 0
-            throw(ArgumentError("Array Channels should have a positive number of buffers"))
-        end
-        ch = new(Vector{AT}(sz), sz, 0)
-        # Allocate sz arrays
-        for i in 1 : sz
-            ch[i] = Array{T}(undef,dims)
-        end
+    function ArrayChannel{AT})(dims::NTuple{Int64}) where AT <: DenseArray{T}
+        ch = new(Condition(), Condition(), AT(undef, dims...))
+    end
+
+    function ArrayChannel(A::AT) where AT <: DenseArray{T}
+        ch = new(Condition(), Condition(), A)
     end
 end
 
-# Buffered put! only
-function put!(ac::ArrayChannel{AT}, v::AT, locs::NTuple{Range}) where AT <: Array{T}
-    while ac.current_sz == ac.sz_max
-        wait(ac.cond_put)
+function put!(ac::ArrayChannel{T,N}) where {T,N}
+    wait(ac.cond_put)
+
+    # Wait for others to have enabled a `take!`
+    target_processes = workers() # A start
+
+    @sync for proc in target_processes
+        @async remotecall_wait(proc, ac.rrid) do id
+            # From the rrid, get the ArrayChannel reference, and wait on cond_take
+            wait(ac = references[id].cond_take)
+        end
     end
 
-    ac.current_sz += 1
-    copyto!(ac.buffers[ac.current_sz], v, locs)
-
-    notify(c.cond_take, nothing, true, false)
-
-    view(v, locs)
+    @sync for proc in target_processes
+        @async @fetchfrom ac.buffer
+    end
 end
+
+function take!(ac::ArrayChannel{T,N}) where {T,N}
+    wait(ac.cond_take)
+end
+
+global references = Dict{RRID, ArrayChannel}()
