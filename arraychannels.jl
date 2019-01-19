@@ -7,7 +7,9 @@ using Base
 import Base: AbstractChannel, put!, take!, show
 include("inplacearray.jl")
 
-# Currently a synchronous buffer for in-place communication of array data.
+"""
+Channel construct with getindex, setindex! overrides. Implements an array construct that may be 'committed' for synchronisation with any number of distributed workers after acknowledging a 'take!' from the recipients.
+"""
 mutable struct ArrayChannel
     cond_take::Condition
     cond_put::Condition
@@ -19,8 +21,8 @@ mutable struct ArrayChannel
         ch = new(Condition(), Condition(), InPlaceArray(Array{T}(undef, dims...)), RRID())
         @sync for proc in workers()
             if proc != myid()
-                @async remotecall_wait(proc, ch.rrid) do id
-                    refernces[id] = ArrayChannel()
+                @async remotecall_wait(proc, ch.rrid, ch.buffer) do id, buffer
+                    refernces[id] = ArrayChannel(buffer, id)
                 end
             end
         end
@@ -28,31 +30,41 @@ mutable struct ArrayChannel
         return ch
     end
 
+    function ArrayChannel(A::InPlaceArray, id::RRID)
+        new(Condition(), Condition(), A, id)
+    end
+
     function ArrayChannel(A::AT) where {AT}
         ch = new(Condition(), Condition(), A, RRID())
     end
 end
 
+"""
+put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
+"""
 function put!(ac::ArrayChannel)
-    wait(ac.cond_put)
-
     # Wait for others to have enabled a `take!`
     target_processes = workers() # A start
 
     @sync for proc in target_processes
         @async remotecall_wait(proc, ac.rrid) do id
             # From the rrid, get the ArrayChannel reference, and wait on cond_take
-            wait(ac = references[id].cond_take)
+            wait(references[id].cond_take)
         end
     end
 
     @sync for proc in target_processes
-        @async @fetchfrom proc ac.buffer
+        @async @fetchfrom proc ac.buffer; notify(ac.cond_put)
     end
 end
 
+"""
+take! signals to the other owners of the ArrayChannel the intention to overwrite the buffer with new array data. Will block the caller.
+"""
 function take!(ac::ArrayChannel)
-    wait(ac.cond_take)
+    notify(ac.cond_take)
+    wait(ac.cond_put)
+    return ac.buffer
 end
 
 # Required to show InPlaceArray objects
@@ -62,6 +74,14 @@ end
 
 function show(S::IO, mime::MIME"text/plain", ac::InPlaceArray)
     invoke(show, Tuple{IO, MIME"text/plain", InPlaceArray}, S, MIME"text/plain"(), ac.buffer)
+end
+
+function getindex(ac::ArrayChannel, keys...)
+    getindex(ac.buffer.src, keys...)
+end
+
+function setindex!(ac::ArrayChannel, v, keys...)
+    setindex!(ac.buffer.src, v, keys...)
 end
 
 global references = Dict{RRID, ArrayChannel}()

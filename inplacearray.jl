@@ -11,7 +11,6 @@ import Serialization: serialize, deserialize
 import Base: size, show, getindex
 
 # Serialisation / Deserialisation of InPlaceArrays will involve a deep copy to a preallocated buffer
-
 mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
     src :: Array{T,N} # Reference to array, never overwritten.
     rrid :: RRID
@@ -29,6 +28,11 @@ mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
 		end
         out::InPlaceArray{T,N}
     end
+
+    # Headless constructor. Returned by the output of an inplacearray.
+    function InPlaceArray{T,N}(A::Array{T,N}, id::RRID) where {T,N}
+        new(A,id)
+    end
 end
 
 # Required to show InPlaceArray objects
@@ -40,8 +44,8 @@ function show(S::IO, mime::MIME"text/plain", A::InPlaceArray)
     invoke(show, Tuple{IO, MIME"text/plain", DenseArray}, S, MIME"text/plain"(), A.src)
 end
 
-function getindex(I::InPlaceArray, key...)
-    getindex(I.src, key...)
+function getindex(I::InPlaceArray, keys...)
+    getindex(I.src, keys...)
 end
 
 function size(A::InPlaceArray)
@@ -118,8 +122,7 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
         deserialize_fillarray!(A, S)
     end
 
-    # Actual return type of deserialise:
-    return nothing # Cannot construct new InPlaceArray as would have another RRID
+    return InPlaceArray(A,id)
 end
 
 InPlaceArray(A::Array{T,N}) where {T,N} = InPlaceArray{T,N}(A)
