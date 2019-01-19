@@ -17,7 +17,7 @@ mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
     rrid :: RRID
 
 	function InPlaceArray{T,N}(A::Array{T,N}) where {T,N}
-	out = new(A, RRID()) # Need this to associate with the InPlaceArray
+        out = new(A, RRID()) # Need this to associate with the InPlaceArray
 		@sync for proc in workers()
             if proc != myid()
     			@async remotecall_wait(proc, out.rrid, size(out), T) do reference, dims, T
@@ -27,7 +27,7 @@ mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
                 @async buffers[reference] = out.src
             end
 		end
-	out::InPlaceArray{T,N}
+        out::InPlaceArray{T,N}
     end
 end
 

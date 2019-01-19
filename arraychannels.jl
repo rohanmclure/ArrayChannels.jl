@@ -1,25 +1,39 @@
 # Rohan McLure, 2018
 
+using Distributed
+import Distributed: RRID, WorkerPool
+
 using Base
-import Base: AbstractChannel, put!, take!
+import Base: AbstractChannel, put!, take!, show
+include("inplacearray.jl")
 
 # Currently a synchronous buffer for in-place communication of array data.
-mutable struct ArrayChannel{T,N} <: AbstractChannel where {T,N}
+mutable struct ArrayChannel
     cond_take::Condition
     cond_put::Condition
-    buffer::InPlaceArray{T,N}
+    buffer::InPlaceArray
+    rrid::RRID
 
     # Main constructor
-    function ArrayChannel{AT})(dims::NTuple{Int64}) where AT <: DenseArray{T}
-        ch = new(Condition(), Condition(), AT(undef, dims...))
+    function ArrayChannel(T::Type, dims...)
+        ch = new(Condition(), Condition(), InPlaceArray(Array{T}(undef, dims...)), RRID())
+        @sync for proc in workers()
+            if proc != myid()
+                @async remotecall_wait(proc, ch.rrid) do id
+                    refernces[id] = ArrayChannel()
+                end
+            end
+        end
+        references[ch.rrid] = ch
+        return ch
     end
 
-    function ArrayChannel(A::AT) where AT <: DenseArray{T}
-        ch = new(Condition(), Condition(), A)
+    function ArrayChannel(A::AT) where {AT}
+        ch = new(Condition(), Condition(), A, RRID())
     end
 end
 
-function put!(ac::ArrayChannel{T,N}) where {T,N}
+function put!(ac::ArrayChannel)
     wait(ac.cond_put)
 
     # Wait for others to have enabled a `take!`
@@ -33,12 +47,21 @@ function put!(ac::ArrayChannel{T,N}) where {T,N}
     end
 
     @sync for proc in target_processes
-        @async @fetchfrom ac.buffer
+        @async @fetchfrom proc ac.buffer
     end
 end
 
-function take!(ac::ArrayChannel{T,N}) where {T,N}
+function take!(ac::ArrayChannel)
     wait(ac.cond_take)
+end
+
+# Required to show InPlaceArray objects
+function show(S::IO, ac::ArrayChannel)
+	invoke(show, Tuple{IO, InPlaceArray}, S, ac.buffer::InPlaceArray)
+end
+
+function show(S::IO, mime::MIME"text/plain", ac::InPlaceArray)
+    invoke(show, Tuple{IO, MIME"text/plain", InPlaceArray}, S, MIME"text/plain"(), ac.buffer)
 end
 
 global references = Dict{RRID, ArrayChannel}()
