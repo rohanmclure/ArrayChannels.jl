@@ -1,45 +1,87 @@
 # Rohan McLure, 2018
 
-mutable struct ArrayChannel{AT} <: AbstractChannel{AT} where AT <: Array{T}
+using Distributed
+import Distributed: RRID, WorkerPool
 
+using Base
+import Base: AbstractChannel, put!, take!, show, getindex, setindex!
+include("inplacearray.jl")
+
+"""
+Channel construct with getindex, setindex! overrides. Implements an array construct that may be 'committed' for synchronisation with any number of distributed workers after acknowledging a 'take!' from the recipients.
+"""
+mutable struct ArrayChannel
     cond_take::Condition
     cond_put::Condition
-    buffers::Vector{AT}
-    sz_max::Integer
-    current_sz::Integer
-
-    # Constructor accepting floats for size
-    function ArrayChannel{AT}(sz::Float64, dims::NTuple{Int64}) where AT <: Array{T}
-        if sz == Inf
-            ArrayChannel{AT}(typemax(Int), dims)
-        else
-            ArrayChannel{AT}(convert(Int,sz), dims)
-        end
-    end
+    buffer::InPlaceArray
+    rrid::RRID
 
     # Main constructor
-    function ArrayChannel{AT})(sz::Integer, dims::NTuple{Int64}) where AT <: Array{T}
-        if sz <= 0
-            throw(ArgumentError("Array Channels should have a positive number of buffers"))
+    function ArrayChannel(T::Type, dim...)
+        ch = new(Condition(), Condition(), InPlaceArray(Array{T}(undef, dims...)), RRID())
+        @sync for proc in workers()
+            if proc != myid()
+                @async remotecall_wait(proc, ch.rrid, ch.buffer) do id, buffer
+                    references[id] = ArrayChannel(buffer, id)
+                end
+            end
         end
-        ch = new(Vector{AT}(sz), sz, 0)
-        # Allocate sz arrays
-        for i in 1 : sz
-            ch[i] = Array{T}(undef,dims)
-        end
+        references[ch.rrid] = ch
+        return ch
+    end
+
+    function ArrayChannel(A::InPlaceArray, id::RRID)
+        new(Condition(), Condition(), A, id)
+    end
+
+    function ArrayChannel(A::AT) where {AT}
+        ch = new(Condition(), Condition(), A, RRID())
     end
 end
 
-# Buffered put! only
-function put!(ac::ArrayChannel{AT}, v::AT, locs::NTuple{Range}) where AT <: Array{T}
-    while ac.current_sz == ac.sz_max
-        wait(ac.cond_put)
+"""
+put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
+"""
+function put!(ac::ArrayChannel)
+    # Wait for others to have enabled a `take!`
+    target_processes = workers() # A start
+
+    @sync for proc in target_processes
+        @async remotecall_wait(proc, ac.rrid) do id
+            # From the rrid, get the ArrayChannel reference, and wait on cond_take
+            wait(references[id].cond_take)
+        end
     end
 
-    ac.current_sz += 1
-    copyto!(ac.buffers[ac.current_sz], v, locs)
-
-    notify(c.cond_take, nothing, true, false)
-
-    view(v, locs)
+    @sync for proc in target_processes
+        @async @fetchfrom proc ac.buffer; notify(ac.cond_put)
+    end
 end
+
+"""
+take! signals to the other owners of the ArrayChannel the intention to overwrite the buffer with new array data. Will block the caller.
+"""
+function take!(ac::ArrayChannel)
+    notify(ac.cond_take)
+    wait(ac.cond_put)
+    return ac.buffer
+end
+
+# Required to show InPlaceArray objects
+function show(S::IO, ac::ArrayChannel)
+	invoke(show, Tuple{IO, InPlaceArray}, S, ac.buffer::InPlaceArray)
+end
+
+function show(S::IO, mime::MIME"text/plain", ac::InPlaceArray)
+    invoke(show, Tuple{IO, MIME"text/plain", InPlaceArray}, S, MIME"text/plain"(), ac.buffer)
+end
+
+function getindex(ac::ArrayChannel, keys...)
+    getindex(ac.buffer.src, keys...)
+end
+
+function setindex!(ac::ArrayChannel, v, keys...)
+    setindex!(ac.buffer.src, v, keys...)
+end
+
+global references = Dict{RRID, ArrayChannel}()
