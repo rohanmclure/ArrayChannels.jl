@@ -15,6 +15,11 @@ mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
     src :: Array{T,N} # Reference to array, never overwritten.
     rrid :: RRID
 
+    # Headless constructor. Returned by the output of an inplacearray.
+    function InPlaceArray{T,N}(A::Array{T,N}, id::RRID) where {T,N}
+        new(A, id)::InPlaceArray{T,N}
+    end
+
 	function InPlaceArray{T,N}(A::Array{T,N}) where {T,N}
         out = new(A, RRID()) # Need this to associate with the InPlaceArray
 		@sync for proc in workers()
@@ -27,11 +32,6 @@ mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
             end
 		end
         out::InPlaceArray{T,N}
-    end
-
-    # Headless constructor. Returned by the output of an inplacearray.
-    function InPlaceArray{T,N}(A::Array{T,N}, id::RRID) where {T,N}
-        new(A,id)
     end
 end
 
@@ -122,9 +122,10 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
         deserialize_fillarray!(A, S)
     end
 
-    return InPlaceArray(A,id)
+    return InPlaceArray(A::Array{T,N}, id)
 end
 
 InPlaceArray(A::Array{T,N}) where {T,N} = InPlaceArray{T,N}(A)
+InPlaceArray(A::Array{T,N}, id::RRID) where {T,N} = InPlaceArray{T,N}(A, id)
 
 global buffers = Dict{RRID, Array}()

@@ -4,7 +4,7 @@ using Distributed
 import Distributed: RRID, WorkerPool
 
 using Base
-import Base: AbstractChannel, put!, take!, show
+import Base: AbstractChannel, put!, take!, show, getindex, setindex!
 include("inplacearray.jl")
 
 """
@@ -17,12 +17,12 @@ mutable struct ArrayChannel
     rrid::RRID
 
     # Main constructor
-    function ArrayChannel(T::Type, dims...)
+    function ArrayChannel(T::Type, dim...)
         ch = new(Condition(), Condition(), InPlaceArray(Array{T}(undef, dims...)), RRID())
         @sync for proc in workers()
             if proc != myid()
                 @async remotecall_wait(proc, ch.rrid, ch.buffer) do id, buffer
-                    refernces[id] = ArrayChannel(buffer, id)
+                    references[id] = ArrayChannel(buffer, id)
                 end
             end
         end
