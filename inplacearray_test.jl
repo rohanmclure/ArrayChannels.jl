@@ -1,29 +1,38 @@
+using Distributed
+addprocs(2)
+
 @everywhere include("inplacearray.jl")
+@everywhere using Test
 
 @everywhere function lookup(id)
-    return buffers[id]
+    return places[id]
 end
 
 @everywhere function exists(id)
     try
-        buffers[id]
+        places[id]
     catch KeyError
-        return true
+        return false
     end
-    return false
+    return true
 end
 
-X = InPlaceArray([1 2; 3 4; 5 6])
-id = X.rrid
-@fetchfrom 2 X
+function test_serialisation(A)
+    X = InPlaceArray(A)
+    id = X.rrid
+    @fetchfrom 2 X
 
-remotecall_wait(2,id) do rrid
-    @assert !exists(rrid)
+    remotecall_wait(2,id) do rrid
+        @test exists(rrid)
+    end
+
+    A = remotecall_fetch(2,X,id) do IA, rrid
+        return lookup(rrid)
+    end
+
+    @test X == A
 end
 
-A = remotecall_fetch(2,X,id) do IA, rrid
-    return lookup(rrid)
-end
-
-# Got the saved copy of the InPlaceArray
-println(A)
+# Floating point test?
+test_serialisation([1 2; 3 4; 5 6])
+test_serialisation([1.0 2.0; 3.0 4.0; 5.0 6.0])

@@ -22,13 +22,14 @@ mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
 
 	function InPlaceArray{T,N}(A::Array{T,N}) where {T,N}
         out = new(A, RRID()) # Need this to associate with the InPlaceArray
-		@sync for proc in workers()
+		@sync for proc in procs() # Replace with some workerpool including me
             if proc != myid()
     			@async remotecall_wait(proc, out.rrid, size(out), T) do reference, dims, T
-    				buffers[reference] = Array{T}(undef, dims...) # May instead point to the array.
+                    # Create uninitialised replica arrays
+                    places[reference] = Array{T}(undef, dims...)
     			end
             else
-                @async buffers[reference] = out.src
+                @async places[out.rrid] = out.src
             end
 		end
         out::InPlaceArray{T,N}
@@ -53,15 +54,12 @@ function size(A::InPlaceArray)
 end
 
 function get_from(RRID::RRID, worker)
-    return @fetchfrom worker buffers[RRID]
+    return @fetchfrom worker places[RRID]
 end
 
 function serialize(S::AbstractSerializer, A::InPlaceArray)
-    @assert A isa InPlaceArray
-
     writetag(S.io, Serialization.OBJECT_TAG)
     serialize(S, typeof(A))
-    # Serialise the rrid before the payload array
     serialize(S, A.rrid)
     serialize(S, A.src)
 end
@@ -77,6 +75,7 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
     # Deserialise an array but pop it in place
     slot = S.counter; S.counter += 1
     d1 = deserialize(S)
+
     if isa(d1, Type)
         elty = d1
         d1 = deserialize(S)
@@ -97,7 +96,7 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
     if isbitstype(elty)
         n = prod(dims)::Int
         if elty === Bool && n > 0
-            A = buffers[id]
+            A = places[id]
             # A = Array{Bool, length(dims)}(undef, dims)
             i = 1
             while i <= n
@@ -111,21 +110,20 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
                 end
             end
         else
-            A = read!(S.io, buffers[id])
+            A = read!(S.io, places[id])
         end
         S.table[slot] = A
     else
         # A = Array{elty, length(dims)}(undef, dims)
-        A = buffers[id]
+        A = places[id]
         S.table[slot] = A
         # sizehint!(S.table, S.counter + div(length(A),4)) # I reckon not necessary
         deserialize_fillarray!(A, S)
     end
-
     return InPlaceArray(A::Array{T,N}, id)
 end
 
 InPlaceArray(A::Array{T,N}) where {T,N} = InPlaceArray{T,N}(A)
 InPlaceArray(A::Array{T,N}, id::RRID) where {T,N} = InPlaceArray{T,N}(A, id)
 
-global buffers = Dict{RRID, Array}()
+global places = Dict{RRID, Array}()

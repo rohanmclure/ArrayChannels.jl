@@ -1,5 +1,6 @@
 # Rohan McLure, 2018
 
+using Base.Threads
 using Distributed
 import Distributed: RRID, WorkerPool
 
@@ -11,32 +12,37 @@ include("inplacearray.jl")
 Channel construct with getindex, setindex! overrides. Implements an array construct that may be 'committed' for synchronisation with any number of distributed workers after acknowledging a 'take!' from the recipients.
 """
 mutable struct ArrayChannel
-    cond_take::Condition
-    cond_put::Condition
+    cond_take::Event
+    cond_put::Event
     buffer::InPlaceArray
     rrid::RRID
 
+    # Headless constructor
+    function ArrayChannel(A::InPlaceArray, id::RRID)
+        new(Event(), Event(), A, id)
+    end
+
     # Main constructor
-    function ArrayChannel(T::Type, dim...)
-        ch = new(Condition(), Condition(), InPlaceArray(Array{T}(undef, dims...)), RRID())
-        @sync for proc in workers()
+    function ArrayChannel(T::Type, dims...)
+        ipa = InPlaceArray(Array{T}(undef, dims...))
+        ch = new(Event(), Event(), ipa, RRID())
+        @sync for proc in procs()
             if proc != myid()
-                @async remotecall_wait(proc, ch.rrid, ch.buffer) do id, buffer
-                    references[id] = ArrayChannel(buffer, id)
+                @async remotecall_wait(proc, ch.rrid, ch.buffer.rrid) do ch_id, arr_id
+                    # Link to preallocated InPlaceArray
+                    replica = InPlaceArray(places[arr_id], arr_id)
+                    channels[ch_id] = ArrayChannel(replica, ch_id)
                 end
+            else
+                @async channels[ch.rrid] = ch
             end
         end
-        references[ch.rrid] = ch
         return ch
     end
+end
 
-    function ArrayChannel(A::InPlaceArray, id::RRID)
-        new(Condition(), Condition(), A, id)
-    end
-
-    function ArrayChannel(A::AT) where {AT}
-        ch = new(Condition(), Condition(), A, RRID())
-    end
+@everywhere function get_arraychannel(id::RRID)
+    return channels[id]
 end
 
 """
@@ -44,17 +50,23 @@ put! initiates two blocking remotecalls for each worker in the workerpool. The f
 """
 function put!(ac::ArrayChannel)
     # Wait for others to have enabled a `take!`
-    target_processes = workers() # A start
+    target_processes = [proc for proc in procs() if proc != myid()]
+
 
     @sync for proc in target_processes
         @async remotecall_wait(proc, ac.rrid) do id
             # From the rrid, get the ArrayChannel reference, and wait on cond_take
-            wait(references[id].cond_take)
+            ac = get_arraychannel(id)
+            wait(ac.cond_take)
         end
     end
 
     @sync for proc in target_processes
-        @async @fetchfrom proc ac.buffer; notify(ac.cond_put)
+        @async remotecall_wait(proc, ac.rrid) do id
+            # Serialise the InPlaceArray, but do nothing with it.
+            ac = get_arraychannel(id)
+            notify(ac.cond_put)
+        end
     end
 end
 
@@ -84,4 +96,4 @@ function setindex!(ac::ArrayChannel, v, keys...)
     setindex!(ac.buffer.src, v, keys...)
 end
 
-global references = Dict{RRID, ArrayChannel}()
+global channels = Dict{RRID, ArrayChannel}()
