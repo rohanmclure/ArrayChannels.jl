@@ -1,15 +1,6 @@
 # Rohan McLure 2019 (C), Australian National University, licensed under MIT.
 # Import me using @everywhere - we will later permit changing of workerpools
 
-using Distributed
-import Distributed: RRID, WorkerPool
-
-using Serialization
-using Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag, deserialize_fillarray!
-import Serialization: serialize, deserialize
-
-import Base: size, show, getindex
-
 # Serialisation / Deserialisation of InPlaceArrays will involve a deep copy to a preallocated buffer
 mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
     src :: Array{T,N} # Reference to array, never overwritten.
@@ -53,12 +44,12 @@ function size(A::InPlaceArray)
     size(A.src)
 end
 
-function get_from(RRID::RRID, worker)
-    return @fetchfrom worker places[RRID]
+function get_from(rrid::RRID, worker)
+    return @fetchfrom worker places[rrid]
 end
 
 function serialize(S::AbstractSerializer, A::InPlaceArray)
-    writetag(S.io, Serialization.OBJECT_TAG)
+    writetag(S.io, OBJECT_TAG)
     serialize(S, typeof(A))
     serialize(S, A.rrid)
     serialize(S, A.src)

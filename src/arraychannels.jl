@@ -1,11 +1,5 @@
 # Rohan McLure, 2018
 
-using Base.Threads
-using Distributed
-import Distributed: RRID, WorkerPool
-
-using Base
-import Base: AbstractChannel, put!, take!, show, getindex, setindex!
 include("inplacearray.jl")
 
 """
@@ -41,7 +35,7 @@ mutable struct ArrayChannel
     end
 end
 
-@everywhere function get_arraychannel(id::RRID)
+function get_arraychannel(id::RRID)
     return channels[id]
 end
 
@@ -94,6 +88,13 @@ end
 
 function setindex!(ac::ArrayChannel, v, keys...)
     setindex!(ac.buffer.src, v, keys...)
+end
+
+function ac_get_from(id::RRID)
+    if id in keys(channels)
+        return channels[id]
+    end
+    nothing
 end
 
 global channels = Dict{RRID, ArrayChannel}()
