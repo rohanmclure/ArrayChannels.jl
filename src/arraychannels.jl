@@ -46,20 +46,22 @@ function put!(ac::ArrayChannel)
     # Wait for others to have enabled a `take!`
     target_processes = [proc for proc in procs() if proc != myid()]
 
+    id = ac.rrid
+    place = ac.buffer
 
     @sync for proc in target_processes
-        @async remotecall_wait(proc, ac.rrid) do id
+        @async remotecall_wait(proc, id) do id
             # From the rrid, get the ArrayChannel reference, and wait on cond_take
-            ac = get_arraychannel(id)
-            wait(ac.cond_take)
+            X = get_arraychannel(id)
+            wait(X.cond_take)
         end
     end
 
     @sync for proc in target_processes
-        @async remotecall_wait(proc, ac.rrid) do id
+        @async remotecall_wait(proc, id, place) do id, payload
             # Serialise the InPlaceArray, but do nothing with it.
-            ac = get_arraychannel(id)
-            notify(ac.cond_put)
+            X = get_arraychannel(id)
+            notify(X.cond_put)
         end
     end
 end

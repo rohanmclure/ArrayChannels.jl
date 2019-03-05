@@ -66,7 +66,6 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
     # Deserialise an array but pop it in place
     slot = S.counter; S.counter += 1
     d1 = deserialize(S)
-
     if isa(d1, Type)
         elty = d1
         d1 = deserialize(S)
