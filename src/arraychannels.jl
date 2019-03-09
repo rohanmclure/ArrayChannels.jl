@@ -42,9 +42,9 @@ end
 """
 put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
 """
-function put!(ac::ArrayChannel)
+function put!(ac::ArrayChannel, participants=procs())
     # Wait for others to have enabled a `take!`
-    target_processes = [proc for proc in procs() if proc != myid()]
+    target_processes = [proc for proc in participants if proc != myid()]
 
     id = ac.rrid
     place = ac.buffer
