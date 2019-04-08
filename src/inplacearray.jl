@@ -63,6 +63,10 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
     # rather than full array. We need this for granular control.
     read(S.io, UInt8)::UInt8
 
+    return deserialize_helper(id, S, places[id])
+end
+
+function deserialize_helper(id::RRID, S::AbstractSerializer, A::Array{T,N}) where {T,N}
     # Deserialise an array but pop it in place
     slot = S.counter; S.counter += 1
     d1 = deserialize(S)
@@ -74,19 +78,16 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
     end
     if isa(d1, Integer)
         if elty !== Bool && isbitstype(elty)
-            a = Vector{elty}(undef, d1)
-            S.table[slot] = a
-            return read!(S.io, a)
+            S.table[slot] = A
+            return read!(S.io, A)
         end
         dims = (Int(d1),)
     else
         dims = convert(Dims, d1)::Dims
     end
-    local A
     if isbitstype(elty)
         n = prod(dims)::Int
         if elty === Bool && n > 0
-            A = places[id]
             # A = Array{Bool, length(dims)}(undef, dims)
             i = 1
             while i <= n
@@ -100,12 +101,10 @@ function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where 
                 end
             end
         else
-            A = read!(S.io, places[id])
+            read!(S.io, A)
         end
         S.table[slot] = A
     else
-        # A = Array{elty, length(dims)}(undef, dims)
-        A = places[id]
         S.table[slot] = A
         # sizehint!(S.table, S.counter + div(length(A),4)) # I reckon not necessary
         deserialize_fillarray!(A, S)

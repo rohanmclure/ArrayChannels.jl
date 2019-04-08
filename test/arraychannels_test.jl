@@ -1,4 +1,4 @@
-addprocs(1); @assert nprocs() == 2
+addprocs(2); @assert nprocs() == 3
 @everywhere using Test
 @everywhere using ArrayChannels
 
@@ -10,7 +10,7 @@ function test_serialise()
         id = X.rrid
 
         @sync begin
-            @async put!(X)
+            @async put!(X,[2])
             @async remotecall_wait(2, id) do id
                 take!(ac_get_from(id))
                 nothing

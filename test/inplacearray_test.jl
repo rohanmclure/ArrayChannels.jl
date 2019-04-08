@@ -1,7 +1,6 @@
 using Distributed
 addprocs(2)
 
-@everywhere include("inplacearray.jl")
 @everywhere using Test
 
 @everywhere function lookup(id)

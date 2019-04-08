@@ -1,5 +1,12 @@
 module ArrayChannels
 
+# Precompile imports
+import Distributed
+import Serialization
+import Sockets
+import Core
+
+# Dependency unqualified imports
 import Base.Threads: Event, @threads
 import Distributed: RRID, WorkerPool, @fetchfrom, @everywhere, procs, myid, remotecall_wait, remotecall_fetch
 import Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag, deserialize_fillarray!, AbstractSerializer, OBJECT_TAG
@@ -15,5 +22,6 @@ export
 
 include("arraychannels.jl")
 include("inplacearray.jl")
+include("precompile.jl")
 
 end
