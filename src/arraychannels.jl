@@ -1,11 +1,10 @@
 # Rohan McLure, 2018
 
-include("inplacearray.jl")
-
 """
 Channel construct with getindex, setindex! overrides. Implements an array construct that may be 'committed' for synchronisation with any number of distributed workers after acknowledging a 'take!' from the recipients.
 """
 mutable struct ArrayChannel
+    lock::ReentrantLock
     cond_take::Event
     cond_put::Event
     buffer::InPlaceArray
@@ -13,13 +12,13 @@ mutable struct ArrayChannel
 
     # Headless constructor
     function ArrayChannel(A::InPlaceArray, id::RRID)
-        new(Event(), Event(), A, id)
+        new(ReentrantLock(), Event(), Event(), A, id)
     end
 
     # Main constructor
     function ArrayChannel(T::Type, dims...)
         ipa = InPlaceArray(Array{T}(undef, dims...))
-        ch = new(Event(), Event(), ipa, RRID())
+        ch = new(ReentrantLock(), Event(), Event(), ipa, RRID())
         @sync for proc in procs()
             if proc != myid()
                 @async remotecall_wait(proc, ch.rrid, ch.buffer.rrid) do ch_id, arr_id
@@ -43,25 +42,27 @@ end
 put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
 """
 function put!(ac::ArrayChannel, participants=procs())
-    # Wait for others to have enabled a `take!`
-    target_processes = [proc for proc in participants if proc != myid()]
+    lock(ac.lock) do
+        # Wait for others to have enabled a `take!`
+        target_processes = [proc for proc in participants if proc != myid()]
 
-    id = ac.rrid
-    place = ac.buffer
+        id = ac.rrid
+        place = ac.buffer
 
-    @sync for proc in target_processes
-        @async remotecall_wait(proc, id) do id
-            # From the rrid, get the ArrayChannel reference, and wait on cond_take
-            X = get_arraychannel(id)
-            wait(X.cond_take)
+        @sync for proc in target_processes
+            @async remotecall_wait(proc, id) do id
+                # From the rrid, get the ArrayChannel reference, and wait on cond_take
+                X = get_arraychannel(id)
+                wait(X.cond_take)
+            end
         end
-    end
 
-    @sync for proc in target_processes
-        @async remotecall_wait(proc, id, place) do id, payload
-            # Serialise the InPlaceArray, but do nothing with it.
-            X = get_arraychannel(id)
-            notify(X.cond_put)
+        @sync for proc in target_processes
+            @async remotecall_wait(proc, id, place) do id, payload
+                # Serialise the InPlaceArray, but do nothing with it.
+                X = get_arraychannel(id)
+                notify(X.cond_put)
+            end
         end
     end
 end
@@ -78,10 +79,6 @@ end
 # Required to show InPlaceArray objects
 function show(S::IO, ac::ArrayChannel)
 	invoke(show, Tuple{IO, InPlaceArray}, S, ac.buffer::InPlaceArray)
-end
-
-function show(S::IO, mime::MIME"text/plain", ac::InPlaceArray)
-    invoke(show, Tuple{IO, MIME"text/plain", InPlaceArray}, S, MIME"text/plain"(), ac.buffer)
 end
 
 function getindex(ac::ArrayChannel, keys...)

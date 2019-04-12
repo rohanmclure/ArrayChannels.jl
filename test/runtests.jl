@@ -4,3 +4,5 @@ using Distributed
 
 include("arraychannels_test.jl")
 test_serialise()
+include("interleave_test.jl")
+test_interleave()

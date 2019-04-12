@@ -1,4 +1,4 @@
-addprocs(2); @assert nprocs() == 3
+rmprocs(workers()...); addprocs(2); @assert nprocs() == 3
 @everywhere using Test
 @everywhere using ArrayChannels
 
