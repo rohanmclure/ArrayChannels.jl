@@ -1,29 +1,14 @@
 # Rohan McLure 2019 (C), Australian National University, licensed under MIT.
-# Import me using @everywhere - we will later permit changing of workerpools
 
 # Serialisation / Deserialisation of InPlaceArrays will involve a deep copy to a preallocated buffer
 mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
     src :: Array{T,N} # Reference to array, never overwritten.
     rrid :: RRID
 
-    # Headless constructor. Returned by the output of an inplacearray.
     function InPlaceArray{T,N}(A::Array{T,N}, id::RRID) where {T,N}
-        new(A, id)::InPlaceArray{T,N}
-    end
-
-	function InPlaceArray{T,N}(A::Array{T,N}) where {T,N}
-        out = new(A, RRID()) # Need this to associate with the InPlaceArray
-		@sync for proc in procs() # Replace with some workerpool including me
-            if proc != myid()
-    			@async remotecall_wait(proc, out.rrid, size(out), T) do reference, dims, T
-                    # Create uninitialised replica arrays
-                    places[reference] = Array{T}(undef, dims...)
-    			end
-            else
-                @async places[out.rrid] = out.src
-            end
-		end
-        out::InPlaceArray{T,N}
+        ipa = new(A, id)::InPlaceArray{T,N}
+        places[id] = A
+        return ipa
     end
 end
 
@@ -42,10 +27,6 @@ end
 
 function size(A::InPlaceArray)
     size(A.src)
-end
-
-function get_from(rrid::RRID, worker)
-    return @fetchfrom worker places[rrid]
 end
 
 function serialize(S::AbstractSerializer, A::InPlaceArray)

@@ -4,13 +4,13 @@ rmprocs(workers()...); addprocs(2); @assert nprocs() == 3
 
 function test_serialise()
     @testset "ArrayChannel Serialisation" begin
-        X = ArrayChannel(Float64, 2, 2)
+        X = ArrayChannel(Float64, procs(), 2, 2)
         X[1,1] = 2.0; X[2,2] = 4.0
 
         id = X.rrid
 
         @sync begin
-            @async put!(X,[2])
+            @async put!(X, 2)
             @async remotecall_wait(2, id) do id
                 take!(ac_get_from(id))
                 nothing
@@ -23,7 +23,7 @@ end
 
 function test_put_take_init()
     @testset "Test ArrayChannel Logistics:" begin
-        X = ArrayChannel(Float64, 2,2)
+        X = ArrayChannel(Float64, procs(), 2, 2)
         B = copy(X.buffer.src)
         X[1,1] = 2.0; X[2,2] = 4.0
         X[1,2] = 0.0; X[2,1] = 0.0

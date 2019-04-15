@@ -4,7 +4,7 @@ rmprocs(workers()...); addprocs(2); @assert nprocs() == 3
 
 function test_interleave()
    @testset "Order Maintained" begin
-        A = ArrayChannel(Float64, 2, 2)
+        A = ArrayChannel(Float64, procs(), 2, 2)
         id = A.rrid
         local remote
         @sync begin

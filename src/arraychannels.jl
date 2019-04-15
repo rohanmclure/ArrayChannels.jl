@@ -7,27 +7,39 @@ mutable struct ArrayChannel
     lock::ReentrantLock
     cond_take::Event
     cond_put::Event
-    buffer::InPlaceArray
+    buffer::Union{Nothing, InPlaceArray}
     rrid::RRID
+
+    # Null constructor
+    function ArrayChannel(id::RRID)
+        ch = new(ReentrantLock(), Event(), Event(), nothing, id)
+        channels[id] = ch
+        return ch
+    end
 
     # Headless constructor
     function ArrayChannel(A::InPlaceArray, id::RRID)
-        new(ReentrantLock(), Event(), Event(), A, id)
+        ch = new(ReentrantLock(), Event(), Event(), A, id)
+        channels[id] = ch
+        return ch
     end
 
     # Main constructor
-    function ArrayChannel(T::Type, dims...)
-        ipa = InPlaceArray(Array{T}(undef, dims...))
-        ch = new(ReentrantLock(), Event(), Event(), ipa, RRID())
-        @sync for proc in procs()
-            if proc != myid()
-                @async remotecall_wait(proc, ch.rrid, ch.buffer.rrid) do ch_id, arr_id
-                    # Link to preallocated InPlaceArray
-                    replica = InPlaceArray(places[arr_id], arr_id)
-                    channels[ch_id] = ArrayChannel(replica, ch_id)
+    function ArrayChannel(T::Type, participants::Vector{Int64}, dims...)
+        id = RRID()
+        ch = new(ReentrantLock(), Event(), Event(), nothing, id)
+        @sync for proc in participants
+            if proc == myid()
+                @async begin
+                    ipa = InPlaceArray(Array{T}(undef, dims...), id)
+                    ch.buffer = ipa
+                    channels[id] = ch
                 end
             else
-                @async channels[ch.rrid] = ch
+                @spawnat proc begin
+                    ipa = InPlaceArray(Array{T}(undef, dims...), id)
+                    ArrayChannel(ipa, id)
+                end
             end
         end
         return ch
@@ -41,28 +53,19 @@ end
 """
 put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
 """
-function put!(ac::ArrayChannel, participants=procs())
+function put!(ac::ArrayChannel, send_to::Int64)
     lock(ac.lock) do
-        # Wait for others to have enabled a `take!`
-        target_processes = [proc for proc in participants if proc != myid()]
-
         id = ac.rrid
         place = ac.buffer
-
-        @sync for proc in target_processes
-            @async remotecall_wait(proc, id) do id
-                # From the rrid, get the ArrayChannel reference, and wait on cond_take
-                X = get_arraychannel(id)
-                wait(X.cond_take)
-            end
+        remotecall_wait(send_to, id) do id
+            # From the rrid, get the ArrayChannel reference, and wait on cond_take
+            X = get_arraychannel(id)
+            wait(X.cond_take)
         end
-
-        @sync for proc in target_processes
-            @async remotecall_wait(proc, id, place) do id, payload
-                # Serialise the InPlaceArray, but do nothing with it.
-                X = get_arraychannel(id)
-                notify(X.cond_put)
-            end
+        remotecall_wait(send_to, id, place) do id, payload
+            # Serialise the InPlaceArray, but do nothing with it.
+            X = get_arraychannel(id)
+            notify(X.cond_put)
         end
     end
 end
@@ -76,8 +79,26 @@ function take!(ac::ArrayChannel)
     return ac.buffer
 end
 
+function serialize(S::AbstractSerializer, ac::ArrayChannel)
+    writetag(S.io, OBJECT_TAG)
+    serialize(S, typeof(ac))
+    serialize(S, ac.rrid)
+end
+
+function deserialize(S::AbstractSerializer, t::Type{<:ArrayChannel}) where {T,N}
+    id = deserialize(S) :: RRID
+    ch = ac_get_from(id)
+    if ch ≠ nothing
+        return ch
+    end
+    return ArrayChannel(id)
+end
+
 # Required to show InPlaceArray objects
 function show(S::IO, ac::ArrayChannel)
+    if ac.buffer == nothing
+        return
+    end
 	invoke(show, Tuple{IO, InPlaceArray}, S, ac.buffer::InPlaceArray)
 end
 
