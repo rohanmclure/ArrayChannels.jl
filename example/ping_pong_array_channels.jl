@@ -12,23 +12,17 @@ function main()
     end
 
     # Allocate the array channel
-    vector_channel = ArrayChannel(Float64, payload)
+    vector_channel = ArrayChannel(Float64, workers(), payload)
 
     @sync for proc in workers()
-        @async begin
-            remotecall_wait(proc, vector_channel.rrid) do ref
-                global id = ref
-            end
-            @fetchfrom proc work(iterations, payload)
-        end
+        @spawnat proc work(vector_channel, iterations, payload)
     end
 end
 
 @everywhere mean(l) = sum(l) / length(l)
 
-@everywhere function work(iterations, payload)
-    vector_channel = ac_get_from(id)
-
+@everywhere function work(vector_channel, iterations, payload)
+    other_worker = myid() == 2 ? 3 : 2
     local t0, t1
     for k in 1 : 2 * iterations
         if k == iterations + 1
@@ -39,7 +33,7 @@ end
             j = k % payload + 1
             i = if (j != 0) j else payload end
             vector_channel[i] += Float64(k)
-            put!(vector_channel, workers())
+            put!(vector_channel, other_worker)
         else
             take!(vector_channel)
         end
@@ -48,7 +42,7 @@ end
 
     throughput = iterations * payload * 8.0 * 1e-6 / ((t1-t0)*1e-9)
 
-    if myid() == 1
+    if myid() == 2
         println("$throughput MB/s")
     end
 end

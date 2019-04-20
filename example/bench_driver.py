@@ -40,9 +40,8 @@ for e in bench_marks:
         print(cmd)
         while os.system(cmd): pass
         with open("/tmp/%s" % temp, 'r') as log_file:
-            while True:
-                line = log_file.readline()
-                match = re.match(r'([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)[\s]?MB\/s', line)
+            for line in log_file.readlines():
+                match = re.search(r'([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)[\s]?MB\/s', line)
                 if match:
                     new_result.append(match.group(1))
                     break

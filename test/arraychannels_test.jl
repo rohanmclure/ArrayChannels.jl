@@ -36,8 +36,6 @@ function test_put_take_init()
             return (Z[1,1], Z[2,2])
         end
 
-        println(D)
-
         # Test for no deadlocks
         @sync for x in 1:100
             @async put!(X)
