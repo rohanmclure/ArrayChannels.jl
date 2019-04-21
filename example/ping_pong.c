@@ -85,7 +85,6 @@ int main(int argc, char** argv) {
   }
 
   int partner_rank = (rank + 1) % 2;
-  int k = 0;
   for (int k = 0; k < iterations; k++) {
     if (rank == k % 2) {
       vector[k % payload] += (double) k; // Slight modification

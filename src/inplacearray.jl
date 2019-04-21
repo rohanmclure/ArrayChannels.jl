@@ -4,10 +4,15 @@
 mutable struct InPlaceArray{T,N} <: DenseArray{T,N}
     src :: Array{T,N} # Reference to array, never overwritten.
     rrid :: RRID
+    buf_no :: Int64
 
-    function InPlaceArray{T,N}(A::Array{T,N}, id::RRID) where {T,N}
-        ipa = new(A, id)::InPlaceArray{T,N}
-        places[id] = A
+    function InPlaceArray{T,N}(A::Array{T,N}, id::RRID, buf_no::Int64=0) where {T,N}
+        ipa = new(A, id, buf_no)::InPlaceArray{T,N}
+        if buf_no == 0
+            places[id] = A
+        else
+            scratches[buf_no][id] = A
+        end
         return ipa
     end
 end
@@ -25,6 +30,10 @@ function getindex(I::InPlaceArray, keys...)
     getindex(I.src, keys...)
 end
 
+function setindex!(I::InPlaceArray, v, keys...)
+    setindex!(I.src, v, keys...)
+end
+
 function size(A::InPlaceArray)
     size(A.src)
 end
@@ -33,21 +42,30 @@ function serialize(S::AbstractSerializer, A::InPlaceArray)
     writetag(S.io, OBJECT_TAG)
     serialize(S, typeof(A))
     serialize(S, A.rrid)
+    serialize(S, A.buf_no)
     serialize(S, A.src)
 end
 
 function deserialize(S::AbstractSerializer, t::Type{<:InPlaceArray{T,N}}) where {T,N}
     # Remote reference which references this 'array' uniquely
     id = deserialize(S)     :: RRID
+    buf_no = deserialize(S) :: Int64
 
     # Read the object tag for the array. Forces following lines to deserialise components of array,
     # rather than full array. We need this for granular control.
     read(S.io, UInt8)::UInt8
 
-    return deserialize_helper(id, S, places[id])
+    local A
+    if buf_no == 0
+        A = places[id]
+    else
+        A = scratches[buf_no][id]
+    end
+
+    return deserialize_helper(id, buf_no, S, A)
 end
 
-function deserialize_helper(id::RRID, S::AbstractSerializer, A::Array{T,N}) where {T,N}
+function deserialize_helper(id::RRID, buf_no::Int64, S::AbstractSerializer, A::Array{T,N}) where {T,N}
     # Deserialise an array but pop it in place
     slot = S.counter; S.counter += 1
     d1 = deserialize(S)
@@ -60,7 +78,7 @@ function deserialize_helper(id::RRID, S::AbstractSerializer, A::Array{T,N}) wher
     if isa(d1, Integer)
         if elty !== Bool && isbitstype(elty)
             S.table[slot] = A
-            return read!(S.io, A)
+            return InPlaceArray(read!(S.io, A), id, buf_no)
         end
         dims = (Int(d1),)
     else
@@ -90,10 +108,11 @@ function deserialize_helper(id::RRID, S::AbstractSerializer, A::Array{T,N}) wher
         # sizehint!(S.table, S.counter + div(length(A),4)) # I reckon not necessary
         deserialize_fillarray!(A, S)
     end
-    return InPlaceArray(A::Array{T,N}, id)
+    return InPlaceArray(A::Array{T,N}, id, buf_no)
 end
 
-InPlaceArray(A::Array{T,N}) where {T,N} = InPlaceArray{T,N}(A)
 InPlaceArray(A::Array{T,N}, id::RRID) where {T,N} = InPlaceArray{T,N}(A, id)
+InPlaceArray(A::Array{T,N}, id::RRID, buf_no::Int64) where {T,N} = InPlaceArray{T,N}(A, id, buf_no)
 
 global places = Dict{RRID, Array}()
+global scratches = [Dict{RRID, Array}(), Dict{RRID, Array}()]

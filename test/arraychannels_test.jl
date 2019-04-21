@@ -1,5 +1,5 @@
 rmprocs(workers()...); addprocs(2); @assert nprocs() == 3
-@everywhere using Test
+using Test
 @everywhere using ArrayChannels
 
 function test_serialise()
@@ -62,7 +62,6 @@ function test_put_take_init()
             Z = ac_get_from(id)
             return (Z[1,1], Z[2,2])
         end
-        println("Check that serialised correctly")
         @test D == (2.0, 4.0)
     end
 end

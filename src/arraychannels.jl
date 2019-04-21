@@ -8,18 +8,22 @@ mutable struct ArrayChannel
     cond_take::Event
     cond_put::Event
     buffer::Union{Nothing, InPlaceArray}
+    scratch1::Union{Nothing, InPlaceArray}
+    scratch2::Union{Nothing, InPlaceArray}
+    participants::Union{Nothing, Vector{Int64}}
     rrid::RRID
 
     # Null constructor
     function ArrayChannel(id::RRID)
-        ch = new(ReentrantLock(), Event(), Event(), nothing, id)
+        ch = new(ReentrantLock(), Event(), Event(), nothing, nothing, nothing, nothing, id)
         channels[id] = ch
         return ch
     end
 
     # Headless constructor
-    function ArrayChannel(A::InPlaceArray, id::RRID)
-        ch = new(ReentrantLock(), Event(), Event(), A, id)
+    function ArrayChannel(A::InPlaceArray{T,N}, ps::Vector{Int64}, id::RRID, s1=nothing, s2=nothing) where {T,N}
+        ps = sort(ps)
+        ch = new(ReentrantLock(), Event(), Event(), A, s1, s2, ps, id)
         channels[id] = ch
         return ch
     end
@@ -27,18 +31,25 @@ mutable struct ArrayChannel
     # Main constructor
     function ArrayChannel(T::Type, participants::Vector{Int64}, dims...)
         id = RRID()
-        ch = new(ReentrantLock(), Event(), Event(), nothing, id)
+        participants = sort(participants)
+        ch = new(ReentrantLock(), Event(), Event(), nothing, nothing, nothing, participants, id)
         @sync for proc in participants
             if proc == myid()
                 @async begin
                     ipa = InPlaceArray(Array{T}(undef, dims...), id)
+                    s1 = InPlaceArray(Array{T}(undef, dims...), id, 1)
+                    s2 = InPlaceArray(Array{T}(undef, dims...), id, 2)
                     ch.buffer = ipa
+                    ch.scratch1 = s1
+                    ch.scratch2 = s2
                     channels[id] = ch
                 end
             else
                 @spawnat proc begin
                     ipa = InPlaceArray(Array{T}(undef, dims...), id)
-                    ArrayChannel(ipa, id)
+                    s1 = InPlaceArray(Array{T}(undef, dims...), id, 1)
+                    s2 = InPlaceArray(Array{T}(undef, dims...), id, 2)
+                    ArrayChannel(ipa, participants, id, s1, s2)
                 end
             end
         end
@@ -94,6 +105,65 @@ function deserialize(S::AbstractSerializer, t::Type{<:ArrayChannel}) where {T,N}
     return ArrayChannel(id)
 end
 
+"""
+Participate in a reduction on all processes participating in this ArrayChannel, where only the 'root' while be affected by the result.
+
+Blocks until this process' role in the reduction is complete.
+"""
+function reduce!(op, ac::ArrayChannel, root::Int64)
+    lock(ac.lock) do
+        peers = ac.participants
+        n = length(peers)
+        pow_2 = 2^Int(ceil(log(2,n))) # Smallest power of two ≤
+        idx = indexin(myid(), peers)[1]
+        root_idx = indexin(root, peers)[1]
+        # Reshape around root
+        pos = (idx < root_idx ? pow_2 - n : pow_2) - (idx - root_idx)
+        z = pos
+        lowest_z = pow_2 - n + 1
+        k = 0
+        leaf = z % 2 != 0 || z == lowest_z
+        while z % 2 == 0
+            if pos - 2^k >= lowest_z
+               wait(ac.cond_put)
+                # Clear
+                ac.cond_put.set = false
+
+                # Perform computation
+                acc_buffer = myid() == root ? ac.buffer : ac.scratch1
+                if k == 0
+                    broadcast!(op, acc_buffer, ac.buffer, ac.scratch2)
+                else
+                    broadcast!(op, acc_buffer, acc_buffer, ac.scratch2)
+                end
+            end
+            z ÷= 2
+            k += 1
+        end
+
+        if myid() != root
+            sender_idx = mod(idx - 2^k, n)
+            sender_idx = sender_idx == 0 ? n : sender_idx
+            send_to = peers[sender_idx]
+            if leaf
+                target(ac.buffer, send_to, 2)
+            else
+                target(ac.scratch1, send_to, 2)
+            end
+        end
+    end
+end
+
+function target(ipa::InPlaceArray{T,N}, proc_id::Int64, buf::Int64) where {T,N}
+    temp = ipa.buf_no
+    ipa.buf_no = buf
+    remotecall_wait(proc_id, ipa) do place
+        X = get_arraychannel(place.rrid)
+        notify(X.cond_put)
+    end
+    ipa.buf_no = temp
+end
+
 # Required to show InPlaceArray objects
 function show(S::IO, ac::ArrayChannel)
     if ac.buffer == nothing
@@ -108,6 +178,10 @@ end
 
 function setindex!(ac::ArrayChannel, v, keys...)
     setindex!(ac.buffer.src, v, keys...)
+end
+
+function fill!(ac::ArrayChannel, v)
+    fill!(ac.buffer.src, v)
 end
 
 function ac_get_from(id::RRID)
