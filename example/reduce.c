@@ -15,7 +15,7 @@ double get_wall_time(){
 
 int main(int argc, char** argv) {
   const int root = 0;
-  int payload, iterations;
+  long payload, iterations;
 
   MPI_Init(&argc, &argv);
   int rank;
@@ -47,8 +47,8 @@ int main(int argc, char** argv) {
     }
   }
 
-  MPI_Bcast(&iterations, 1, MPI_INT, root, MPI_COMM_WORLD);
-  MPI_Bcast(&payload, 1, MPI_INT, root, MPI_COMM_WORLD);
+  MPI_Bcast(&iterations, 1, MPI_LONG, root, MPI_COMM_WORLD);
+  MPI_Bcast(&payload, 1, MPI_LONG, root, MPI_COMM_WORLD);
   double* vector = malloc(payload * 2 * sizeof(double));
   double* ones = vector + payload;
 
