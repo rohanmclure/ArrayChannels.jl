@@ -53,3 +53,4 @@ with open('results/results-%s' % dt.now(), 'w') as result_file:
     writer.writerow(ResultType._fields)
     for r in results:
         writer.writerow(r)
+        result_file.flush()
