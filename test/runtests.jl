@@ -4,6 +4,7 @@ using Distributed
 
 include("arraychannels_test.jl")
 test_serialise()
+test_synchronisation()
 include("interleave_test.jl")
 test_interleave()
 include("reduce_test.jl")

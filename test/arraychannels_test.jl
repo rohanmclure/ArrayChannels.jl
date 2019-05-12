@@ -21,6 +21,24 @@ function test_serialise()
     end
 end
 
+function test_synchronisation()
+    @testset "Test synchronisation by put!, take!" begin
+        X = ArrayChannel(Int64, [1,2], 100000)
+        T = Vector{Future}(undef, 5)
+        @sync for i in 1:5
+            T[i] = @spawnat 2 begin
+                take!(X)
+                return X[1]
+            end
+            fill!(X, i)
+            put!(X, 2)
+        end
+        for (i, t) in enumerate(T)
+            @test fetch(t) == i
+        end
+    end
+end
+
 function test_put_take_init()
     @testset "Test ArrayChannel Logistics:" begin
         X = ArrayChannel(Float64, procs(), 2, 2)

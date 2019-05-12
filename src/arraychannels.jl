@@ -5,8 +5,8 @@ Channel construct with getindex, setindex! overrides. Implements an array constr
 """
 mutable struct ArrayChannel
     lock::ReentrantLock
-    cond_take::Event
-    cond_put::Event
+    cond_take::Channel{Nothing}
+    cond_put::Channel{Nothing}
     buffer::Union{Nothing, InPlaceArray}
     scratch1::Union{Nothing, InPlaceArray}
     scratch2::Union{Nothing, InPlaceArray}
@@ -15,7 +15,7 @@ mutable struct ArrayChannel
 
     # Null constructor
     function ArrayChannel(id::RRID)
-        ch = new(ReentrantLock(), Event(), Event(), nothing, nothing, nothing, nothing, id)
+        ch = new(ReentrantLock(), Channel{Nothing}(1), Channel{Nothing}(1), nothing, nothing, nothing, nothing, id)
         channels[id] = ch
         return ch
     end
@@ -23,7 +23,7 @@ mutable struct ArrayChannel
     # Headless constructor
     function ArrayChannel(A::InPlaceArray{T,N}, ps::Vector{Int64}, id::RRID, s1=nothing, s2=nothing) where {T,N}
         ps = sort(ps)
-        ch = new(ReentrantLock(), Event(), Event(), A, s1, s2, ps, id)
+        ch = new(ReentrantLock(), Channel{Nothing}(1), Channel{Nothing}(1), A, s1, s2, ps, id)
         channels[id] = ch
         return ch
     end
@@ -32,7 +32,7 @@ mutable struct ArrayChannel
     function ArrayChannel(T::Type, participants::Vector{Int64}, dims...)
         id = RRID()
         participants = sort(participants)
-        ch = new(ReentrantLock(), Event(), Event(), nothing, nothing, nothing, participants, id)
+        ch = new(ReentrantLock(), Channel{Nothing}(1), Channel{Nothing}(1), nothing, nothing, nothing, participants, id)
         @sync for proc in participants
             if proc == myid()
                 @async begin
@@ -71,12 +71,12 @@ function put!(ac::ArrayChannel, send_to::Int64)
         remotecall_wait(send_to, id) do id
             # From the rrid, get the ArrayChannel reference, and wait on cond_take
             X = get_arraychannel(id)
-            wait(X.cond_take)
+            take!(X.cond_take)
         end
         remotecall_wait(send_to, id, place) do id, payload
             # Serialise the InPlaceArray, but do nothing with it.
             X = get_arraychannel(id)
-            notify(X.cond_put)
+            put!(X.cond_put, nothing)
         end
     end
 end
@@ -85,8 +85,8 @@ end
 take! signals to the other owners of the ArrayChannel the intention to overwrite the buffer with new array data. Will block the caller.
 """
 function take!(ac::ArrayChannel)
-    notify(ac.cond_take)
-    wait(ac.cond_put)
+    put!(ac.cond_take, nothing)
+    take!(ac.cond_put)
     return ac.buffer
 end
 
@@ -125,9 +125,9 @@ function reduce!(op, ac::ArrayChannel, root::Int64)
         leaf = z % 2 != 0 || z == lowest_z
         while z % 2 == 0
             if pos - 2^k >= lowest_z
-               wait(ac.cond_put)
+                take!(ac.cond_put)
                 # Clear
-                ac.cond_put.set = false
+                # ac.cond_put.set = false
 
                 # Perform computation
                 acc_buffer = myid() == root ? ac.buffer : ac.scratch1
@@ -159,7 +159,7 @@ function target(ipa::InPlaceArray{T,N}, proc_id::Int64, buf::Int64) where {T,N}
     ipa.buf_no = buf
     remotecall_wait(proc_id, ipa) do place
         X = get_arraychannel(place.rrid)
-        notify(X.cond_put)
+        put!(X.cond_put, nothing)
     end
     ipa.buf_no = temp
 end
