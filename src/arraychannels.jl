@@ -1,12 +1,44 @@
 # Rohan McLure, 2018
 
 """
+Construct permitting synchronisation to be occuring simultaneously with a number of different processing preparing to wrote to our local array.
+"""
+mutable struct Handshake
+    pid_events::Vector{Union{Channel{Nothing}, Nothing}}
+
+    function Handshake(participants::Vector{Int64})
+        events = map(1:nprocs()) do pid
+            if pid in participants
+                return Channel{Nothing}(0)
+            else
+                return nothing
+            end
+        end
+        new(events)
+    end
+end
+
+"""
+Synchronisation primatives for custom synchronisation type.
+"""
+function put!(hs::Handshake, put_as::Int64)
+    put!(hs.pid_events[put_as], nothing)
+end
+
+"""
+Synchronisation primatives for custom synchronisation type.
+"""
+function take!(hs::Handshake, take_from::Int64)
+    take!(hs.pid_events[take_from])
+end
+
+"""
 Channel construct with getindex, setindex! overrides. Implements an array construct that may be 'committed' for synchronisation with any number of distributed workers after acknowledging a 'take!' from the recipients.
 """
 mutable struct ArrayChannel
-    lock::ReentrantLock
-    cond_take::Channel{Nothing}
-    cond_put::Channel{Nothing}
+    lock::Union{Nothing, ReentrantLock}
+    cond_take::Union{Nothing, Handshake}
+    cond_put::Union{Nothing, Channel{Nothing}}
     buffer::Union{Nothing, InPlaceArray}
     scratch1::Union{Nothing, InPlaceArray}
     scratch2::Union{Nothing, InPlaceArray}
@@ -15,7 +47,7 @@ mutable struct ArrayChannel
 
     # Null constructor
     function ArrayChannel(id::RRID)
-        ch = new(ReentrantLock(), Channel{Nothing}(1), Channel{Nothing}(1), nothing, nothing, nothing, nothing, id)
+        ch = new(nothing, nothing, nothing, nothing, nothing, nothing, nothing, id)
         channels[id] = ch
         return ch
     end
@@ -23,7 +55,7 @@ mutable struct ArrayChannel
     # Headless constructor
     function ArrayChannel(A::InPlaceArray{T,N}, ps::Vector{Int64}, id::RRID, s1=nothing, s2=nothing) where {T,N}
         ps = sort(ps)
-        ch = new(ReentrantLock(), Channel{Nothing}(1), Channel{Nothing}(1), A, s1, s2, ps, id)
+        ch = new(ReentrantLock(), Handshake(ps), Channel{Nothing}(1), A, s1, s2, ps, id)
         channels[id] = ch
         return ch
     end
@@ -32,7 +64,7 @@ mutable struct ArrayChannel
     function ArrayChannel(T::Type, participants::Vector{Int64}, dims...)
         id = RRID()
         participants = sort(participants)
-        ch = new(ReentrantLock(), Channel{Nothing}(1), Channel{Nothing}(1), nothing, nothing, nothing, participants, id)
+        ch = new(ReentrantLock(), Handshake(participants), Channel{Nothing}(1), nothing, nothing, nothing, participants, id)
         @sync for proc in participants
             if proc == myid()
                 @async begin
@@ -64,30 +96,39 @@ end
 """
 put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
 """
-function put!(ac::ArrayChannel, send_to::Int64)
+function put!(ac::ArrayChannel, send_to::Int64, tag::Union{RRID, Nothing}=nothing)
+    same_channel = tag === nothing
     lock(ac.lock) do
-        id = ac.rrid
+        id = same_channel ? ac.rrid : (tag::RRID)
         place = ac.buffer
-        remotecall_wait(send_to, id) do id
+        remotecall_wait(send_to, id, myid()) do rrid, my_pid
             # From the rrid, get the ArrayChannel reference, and wait on cond_take
-            X = get_arraychannel(id)
-            take!(X.cond_take)
+            X = get_arraychannel(rrid)
+            put!(X.cond_take, my_pid)
         end
-        remotecall_wait(send_to, id, place) do id, payload
-            # Serialise the InPlaceArray, but do nothing with it.
-            X = get_arraychannel(id)
-            put!(X.cond_put, nothing)
+        if same_channel
+            remotecall_wait(send_to, id, place) do id, payload
+                # Serialise the InPlaceArray, but do nothing with it.
+                X = get_arraychannel(id)
+                put!(X.cond_put, nothing)
+            end
+        else
+            # Target another channel's buffer by anonymously altering the buffer metadata
+            target(place, send_to, 0, tag)
         end
     end
 end
 
 """
-take! signals to the other owners of the ArrayChannel the intention to overwrite the buffer with new array data. Will block the caller.
+take! signals to the other owners of the ArrayChannel the intention to overwrite the buffer with new array data, and then waits for it to be written.
 """
-function take!(ac::ArrayChannel)
-    put!(ac.cond_take, nothing)
-    take!(ac.cond_put)
-    return ac.buffer
+function take!(ac::ArrayChannel, recv_from::Int64)
+    # Accept any code
+    take!(ac.cond_take, recv_from)
+    lock(ac.lock) do
+        take!(ac.cond_put)
+    end
+    return ac
 end
 
 function serialize(S::AbstractSerializer, ac::ArrayChannel)
@@ -154,14 +195,25 @@ function reduce!(op, ac::ArrayChannel, root::Int64)
     end
 end
 
-function target(ipa::InPlaceArray{T,N}, proc_id::Int64, buf::Int64) where {T,N}
-    temp = ipa.buf_no
+"""
+Since InPlaceArrays are serialised in place (subject to their buffer reference), use this method to anonymously alter the buffer reference before sendint to a buffer of choice.
+
+Buffers are counted as follows:
+The reference to the main buffer for the ArrayChannel is given a code zero.
+Currently only to scratch buffers are needed for `reduce!`, however a positive integer will reference these.
+"""
+function target(ipa::InPlaceArray{T,N}, proc_id::Int64, buf::Int64, channel::Union{RRID, Nothing}=nothing) where {T,N}
+    new_id = channel === nothing ? ipa.rrid : (channel::RRID)
+    backup_id = ipa.rrid
+    backup_buf_no = ipa.buf_no
     ipa.buf_no = buf
+    ipa.rrid = new_id
     remotecall_wait(proc_id, ipa) do place
         X = get_arraychannel(place.rrid)
         put!(X.cond_put, nothing)
     end
-    ipa.buf_no = temp
+    ipa.buf_no = backup_buf_no
+    ipa.rrid = backup_id
 end
 
 # Required to show InPlaceArray objects
@@ -170,6 +222,14 @@ function show(S::IO, ac::ArrayChannel)
         return
     end
 	invoke(show, Tuple{IO, InPlaceArray}, S, ac.buffer::InPlaceArray)
+end
+
+function copy!(AC::ArrayChannel, src::AbstractArray)
+    copy!(AC.buffer.src, src)
+end
+
+function copy!(dest::AbstractArray, AC::ArrayChannel)
+    copy!(dest, AC.buffer.src)
 end
 
 function getindex(ac::ArrayChannel, keys...)
@@ -182,6 +242,30 @@ end
 
 function fill!(ac::ArrayChannel, v)
     fill!(ac.buffer.src, v)
+end
+
+function length(ac::ArrayChannel)
+    length(ac.buffer.src)
+end
+
+function iterate(ac::ArrayChannel)
+    iterate(ac.buffer.src)
+end
+
+function iterate(ac::ArrayChannel, state)
+    iterate(ac.buffer.src)
+end
+
+function broadcast(op, As::ArrayChannel...)
+    broadcast(op, map(x->x.buffer.src, As))
+end
+
+function broadcast!(op, dest::ArrayChannel, As::AbstractArray...)
+    broadcast!(op, dest.buffer.src, As)
+end
+
+function broadcast!(op, dest::AbstractArray, As::ArrayChannel...)
+    broadcast!(op, dest, map(x->x.buffer.src, As))
 end
 
 function ac_get_from(id::RRID)

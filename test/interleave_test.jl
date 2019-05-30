@@ -5,6 +5,7 @@ rmprocs(workers()...); addprocs(2); @assert nprocs() == 3
 function test_interleave()
    @testset "Order Maintained" begin
         A = ArrayChannel(Float64, procs(), 2, 2)
+        pid = myid()
         id = A.rrid
         local remote
         @sync begin
@@ -19,7 +20,7 @@ function test_interleave()
                 X = ac_get_from(rrid)
                 v = Vector{Int64}()
                 for i in 1:10
-                    take!(X)
+                    take!(X, pid)
                     push!(v, i)
                 end
                 return v

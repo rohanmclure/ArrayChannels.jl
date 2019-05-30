@@ -11,13 +11,10 @@ function test_serialise()
 
         @sync begin
             @async put!(X, 2)
-            @async remotecall_wait(2, id) do id
-                take!(ac_get_from(id))
-                nothing
-            end
+            @async @spawnat 2 take!(X, 1)
         end
 
-        @test (@fetchfrom 2 ac_get_from(id)[1,1]) == 2.0
+        @test (@fetchfrom 2 X[1,1]) == 2.0
     end
 end
 
@@ -27,7 +24,7 @@ function test_synchronisation()
         T = Vector{Future}(undef, 5)
         @sync for i in 1:5
             T[i] = @spawnat 2 begin
-                take!(X)
+                take!(X, 1)
                 return X[1]
             end
             fill!(X, i)
@@ -36,6 +33,26 @@ function test_synchronisation()
         for (i, t) in enumerate(T)
             @test fetch(t) == i
         end
+    end
+end
+
+function test_target_other_channel()
+    @testset "Target another channel with put!" begin
+        X = ArrayChannel(Int64, [1,2], 10)
+        Y = ArrayChannel(Int64, [1,2], 10)
+
+        fill!(X, 10)
+        @sync @spawnat 2 fill!(Y, 20)
+
+        local test_value
+        @sync begin
+            @async put!(X, 2, Y.rrid)
+            test_value = @spawnat 2 begin
+                take!(Y, 1)
+                Y[1,1]
+            end
+        end
+        @test fetch(test_value) == 10
     end
 end
 
