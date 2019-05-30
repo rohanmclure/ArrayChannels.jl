@@ -12,7 +12,6 @@ function main()
     iterations, order, r = argv
     ranks = nworkers()
     procs_x, procs_y = factor(ranks)
-    println("Factoring: x=$procs_x, y=$procs_y")
     out_channels = Matrix{Vector{Union{RemoteChannel,Nothing}}}(undef, procs_y, procs_x)
     dims = Matrix{Tuple{Int,Int}}(undef, procs_y, procs_x)
     std_width = Int(ceil(order / procs_x))

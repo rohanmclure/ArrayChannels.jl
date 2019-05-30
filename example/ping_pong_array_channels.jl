@@ -1,4 +1,7 @@
-include("../preload.jl")
+using Distributed
+addprocs(2)
+@everywhere include("preload.jl")
+@everywhere using ArrayChannels
 
 function main()
     local iterations, payload
@@ -35,7 +38,7 @@ end
             vector_channel[i] += Float64(k)
             put!(vector_channel, other_worker)
         else
-            take!(vector_channel)
+            take!(vector_channel, other_worker)
         end
     end
     t1 = time_ns()

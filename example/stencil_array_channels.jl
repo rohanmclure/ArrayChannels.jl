@@ -102,13 +102,11 @@ end
     procs_x, procs_y = proc_dims
     id = myid() - 2
     p_i, p_j = (id ÷ procs_x, id % procs_x)
-    println("p_i = $p_i, p_j = $p_j")
     # Start coordinate in global coordinates
     std_height, std_width = Int(ceil(order / procs_y)), Int(ceil(order / procs_x))
     i_start, j_start = p_i * std_height, p_j * std_width
     i_o_start, j_o_start = (ub ? 1 : r+1), (lb ? 1 : r+1)
     i_o_end, j_o_end = (db ? h : h-r), (rb ? w : w-r)
-    println("Working on dims: ($i_o_start, $i_o_end), ($j_o_start, $j_o_end)")
     for i in 1:h
         for j in 1:w
             A_central[i,j] = (p_i*std_height + i - 1.0) + (p_j*std_width + j - 1.0)
