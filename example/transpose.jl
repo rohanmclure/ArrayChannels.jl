@@ -7,16 +7,16 @@ addprocs(4)
 
 function main()
     # Parameters
-    local iterations, order, tiling
+    local iterations, order
     if length(ARGS) == 0
         iterations = order = 1000
         tiling = 32
-    elseif length(ARGS) != 3 || nprocs() == 1
-        ("Usage: julia -p <# workers> transpose.jl <# iterations> <# order> <# tiling>")
+    elseif length(ARGS) != 2 || nprocs() == 1
+        ("Usage: julia -p <# workers> transpose.jl <# iterations> <# order>")
         exit(1)
     else
         argv = map(x -> parse(Int, x), ARGS)
-        iterations, order, tiling = argv
+        iterations, order = argv
     end
 
     if order % nworkers() != 0
@@ -26,7 +26,6 @@ function main()
 
     # Rank setup
     rank = nworkers()
-    println("Rank: $rank, Iterations: $iterations, Order: $order, Tiling: $tiling")
 
     # Dimension setup
     std_dim = Int(order / rank)

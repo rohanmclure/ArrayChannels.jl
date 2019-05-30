@@ -88,11 +88,8 @@ end
     std_height, std_width = Int(ceil(order/procs_y)), Int(ceil(order/procs_x))
     i_start, j_start = (id_y-1)*std_height, (id_x-1)*std_width
     i_end, j_end = i_start + h - 1, j_start + w - 1
-    println("ub: $ub, rb: $rb, db: $db, lb: $lb")
-    println("Local chunk: ($i_start, $j_start)")
     i_o_start, j_o_start = (ub ? 1 : r+1), (lb ? 1 : r+1)
     i_o_end, j_o_end = (db ? h : h-r), (rb ? w : w-r)
-    println("Working on: ($i_o_start : $i_o_end), ($j_o_start : $j_o_end)")
     A = zeros(Float64, (local_dims .+ 2*r)...)
     for i in 1:h
         for j in 1:w
