@@ -62,7 +62,7 @@ end
     throughput = iterations * payload * 8.0 * 1e-6 / ((t1-t0)*1e-9)
 
     if myid() == 2
-        println("$throughput MB/s")
+        println("Rate (MB/s): $throughput")
     end
 end
 

@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
 
   if (rank == root) {
     t1 = get_wall_time();
-    printf("%.9f MB/s\n", ((double) (iterations * payload) * 8.0) * (1e-6) / (t1-t0));
+    printf("Rate (MB/s): %.9f\n", ((double) (iterations * payload) * 8.0) * (1e-6) / (t1-t0));
   }
 
   MPI_Finalize();
