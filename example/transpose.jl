@@ -1,17 +1,11 @@
 # Rohan McLure, Australian National University (2019)
 # Distributed implementation of the Transpose Parallel Research Kernel
-
 using Distributed
-addprocs(4)
-@everywhere using Profile
 
 function main()
     # Parameters
     local iterations, order
-    if length(ARGS) == 0
-        iterations = order = 1000
-        tiling = 32
-    elseif length(ARGS) != 2 || nprocs() == 1
+    if length(ARGS) != 2 || nprocs() == 1
         ("Usage: julia -p <# workers> transpose.jl <# iterations> <# order>")
         exit(1)
     else
@@ -140,7 +134,7 @@ end
     block_out = Matrix{Float64}(undef, width_local, width_local)
 
     local t0, t1
-    @profile for k in 0 : iterations
+    for k in 0 : iterations
         if k == 1
             t0 = time_ns()
         end

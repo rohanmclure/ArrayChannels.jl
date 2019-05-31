@@ -76,7 +76,7 @@ function main()
         stencil_size = 4*r+1 # Star
         flops = (2*stencil_size+1) * active_points
         avgtime = time/iterations
-        println("Rate (MFlops/s): ", 1.e-6*flops/avgtime, "Avg time (s): ", avgtime)
+        println("Rate (MFlops/s): $(1.e-6*flops/avgtime) Avg time (s):  $avgtime")
     else
         println("ERROR: L1 norm = $norm Reference L1 norm = $reference_norm")
         exit(9)
