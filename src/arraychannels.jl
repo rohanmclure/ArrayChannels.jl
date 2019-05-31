@@ -1,4 +1,4 @@
-# Rohan McLure, 2018
+# Rohan McLure 2019 (C), Australian National University, licensed under MIT.
 
 """
 Construct permitting synchronisation to be occuring simultaneously with a number of different processing preparing to wrote to our local array.
@@ -19,6 +19,8 @@ mutable struct Handshake
 end
 
 """
+    put!(hs::Handshake, put_as::Int64)
+
 Synchronisation primatives for custom synchronisation type.
 """
 function put!(hs::Handshake, put_as::Int64)
@@ -26,6 +28,8 @@ function put!(hs::Handshake, put_as::Int64)
 end
 
 """
+    take!(hs::Handshake, take_from::Int64)
+
 Synchronisation primatives for custom synchronisation type.
 """
 function take!(hs::Handshake, take_from::Int64)
@@ -33,7 +37,19 @@ function take!(hs::Handshake, take_from::Int64)
 end
 
 """
-Channel construct with getindex, setindex! overrides. Implements an array construct that may be 'committed' for synchronisation with any number of distributed workers after acknowledging a 'take!' from the recipients.
+    ArrayChannel(T::Type, participants::Vector{Int64}, dims::Int64...)
+
+Channel construct that associates itself with an array at each of the specified 'participating' processes.
+Allows for synchronous, in place communication between bufferes on different processes by means of [`put!`](@ref), [`take!`](@ref), [scatter!](@ref), [gather!](@ref) or [reduce!](@ref).
+
+# Examples
+```jldoctest
+julia> A = ArrayChannel(Float64, workers(), 2, 2)
+
+Nothing displayed as master process is not part of workers(), and as such
+does not host any local data.
+```
+
 """
 mutable struct ArrayChannel
     lock::Union{Nothing, ReentrantLock}
@@ -94,6 +110,8 @@ function get_arraychannel(id::RRID)
 end
 
 """
+    put!(ac::ArrayChannel, send_to::Int64, [tag::Union{Distributed.RRID, Nothing}])
+
 put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
 """
 function put!(ac::ArrayChannel, send_to::Int64, tag::Union{RRID, Nothing}=nothing)
@@ -120,6 +138,8 @@ function put!(ac::ArrayChannel, send_to::Int64, tag::Union{RRID, Nothing}=nothin
 end
 
 """
+    take!(ac::ArrayChannel, recv_from::Int64)
+
 take! signals to the other owners of the ArrayChannel the intention to overwrite the buffer with new array data, and then waits for it to be written.
 """
 function take!(ac::ArrayChannel, recv_from::Int64)
@@ -147,9 +167,16 @@ function deserialize(S::AbstractSerializer, t::Type{<:ArrayChannel}) where {T,N}
 end
 
 """
+    reduce!(op, ac::ArrayChannel, root::Int64)
 Participate in a reduction on all processes participating in this ArrayChannel, where only the 'root' while be affected by the result.
 
 Blocks until this process' role in the reduction is complete.
+
+# Example
+```jldoctest
+Reduce by taking the vector sum, with root at process one
+julia> reduce!(+, A, 1)
+```
 """
 function reduce!(op, ac::ArrayChannel, root::Int64)
     lock(ac.lock) do
@@ -167,8 +194,6 @@ function reduce!(op, ac::ArrayChannel, root::Int64)
         while z % 2 == 0
             if pos - 2^k >= lowest_z
                 take!(ac.cond_put)
-                # Clear
-                # ac.cond_put.set = false
 
                 # Perform computation
                 acc_buffer = myid() == root ? ac.buffer : ac.scratch1

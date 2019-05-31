@@ -27,7 +27,7 @@ A = ArrayChannel(Float64, procs(), 2, 2)
 B = [2.0 0.0;
      0.0 4.0]
 
-copyto!(A,B)
+copy!(A,B)
 
 # Print the contents of A at locale 2
 # The contents of the ArrayChannel at 2 will be uninitialised
@@ -48,15 +48,12 @@ Where dimensions match, the sending process may elect to specify the output chan
 ```julia
 @everywhere using ArrayChannels
 # From process one
-A = ArrayChannel(Float64, [1], 10, 2)
-# B is not allocated on this process, and as such will have no local data
-B = ArrayChannel(Float64, [2], 10, 2)
+A = ArrayChannel(Float64, [1,2], 10, 2)
+B = ArrayChannel(Float64, [1,2], 10, 2)
 target_rrid = B.rrid
 
 @sync begin
     @async put!(A, 2, target_rrid)
-    # Even though B has no local data, its reference obtains a binding on process two
-    # when invoked on that process
     @spawnat 2 take!(B, 1)
 end
 ```
@@ -77,7 +74,7 @@ A = ArrayChannel(Int64, [1,2,3,4], 10)
 end
 
 @sync for proc in [1,2,3,4]
-    @spawnat proc reduce!(A, 1)
+    @spawnat proc reduce!(+, A, 1)
 end
 @assert A[1] == 4
 ```
