@@ -31,7 +31,7 @@ function main()
 
     ground_truth = iterations+2.0+(iterations*iterations+5.0*iterations+4.0)*(ranks-1)/2;
 
-    if abs(value - ground_truth) >= 1.e-8
+    if abs(value - ground_truth) <= 1.e-8
         println("Solution validates")
     else
         println("Value provided: $value")
