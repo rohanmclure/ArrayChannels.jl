@@ -2,7 +2,6 @@
 # Distributed implementation of the Reduce Parallel Research Kernel
 
 using Distributed
-@everywhere include("preload.jl")
 @everywhere using ArrayChannels
 
 function main()
@@ -34,7 +33,7 @@ function main()
     if abs(value - ground_truth) <= 1.e-8
         println("Solution validates")
     else
-        println("Value provided: $value")
+        println("Value provided: $value, expected: $ground_truth")
     end
     avgtime = time / iterations
     throughput = 1.e-6 * (2.0*ranks-1.0)*payload/avgtime
@@ -45,6 +44,7 @@ end
 
 @everywhere function work(A, root, iterations, payload)
     local t0, t1
+    fill!(A, 1.0)
     A_data = A.buffer.src
     constant_vector = ones(payload)
     for k in 0 : iterations

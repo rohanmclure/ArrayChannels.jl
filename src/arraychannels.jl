@@ -7,7 +7,8 @@ mutable struct Handshake
     pid_events::Vector{Union{Channel{Nothing}, Nothing}}
 
     function Handshake(participants::Vector{Int64})
-        events = map(1:nprocs()) do pid
+        largest_proc = maximum(procs())
+        events = map(1:largest_proc) do pid
             if pid in participants
                 return Channel{Nothing}(0)
             else
@@ -183,6 +184,7 @@ function reduce!(op, ac::ArrayChannel, root::Int64)
         peers = ac.participants
         n = length(peers)
         pow_2 = 2^Int(ceil(log(2,n))) # Smallest power of two ≤
+        ac_id = ac.rrid
         idx = indexin(myid(), peers)[1]
         root_idx = indexin(root, peers)[1]
         # Reshape around root
@@ -193,6 +195,10 @@ function reduce!(op, ac::ArrayChannel, root::Int64)
         leaf = z % 2 != 0 || z == lowest_z
         while z % 2 == 0
             if pos - 2^k >= lowest_z
+                recv_idx = mod(idx + 2^k, n)
+                recv_idx = recv_idx == 0 ? n : recv_idx
+                recv_from = peers[recv_idx]
+                take!(ac.cond_take, recv_from)
                 take!(ac.cond_put)
 
                 # Perform computation
@@ -211,6 +217,12 @@ function reduce!(op, ac::ArrayChannel, root::Int64)
             sender_idx = mod(idx - 2^k, n)
             sender_idx = sender_idx == 0 ? n : sender_idx
             send_to = peers[sender_idx]
+
+            remotecall_wait(send_to, ac_id, peers[idx]) do rrid, sender_id
+                X = get_arraychannel(rrid)
+                put!(X.cond_take, sender_id)
+            end
+
             if leaf
                 target(ac.buffer, send_to, 2)
             else

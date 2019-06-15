@@ -5,6 +5,7 @@ using Test
 function test_reduce_two()
     @testset "Two-process Reduction" begin
         A = ArrayChannel(Float64, procs()[1:2], 10)
+        println("Procs one and two: $(procs()[1:2])")
         fill!(A, 1.0)
         proc_2 = procs()[2]
         @sync @spawnat proc_2 fill!(A, 1.0)
@@ -24,14 +25,16 @@ end
 
 function test_reduce_five()
     @testset "Five-process reduction" begin
-        A = ArrayChannel(Float64, procs(), 10)
-        @sync for i in 1 : length(procs())
-            @spawnat procs()[i] fill!(A, i)
-        end
+        A = ArrayChannel(Float64, procs(), 100000)
         proc_3 = procs()[3]
-        @sync for proc in procs()
-            @spawnat proc reduce!(+, A, proc_3)
+        for k in 1:10
+            @sync for i in 1 : length(procs())
+                @spawnat procs()[i] begin
+                    fill!(A, i)
+                    reduce!(+, A, proc_3)
+                end
+            end
+            @test (@fetchfrom proc_3 A[1]) == 15.0
         end
-        @test (@fetchfrom proc_3 A[1]) == 15.0
     end
 end
