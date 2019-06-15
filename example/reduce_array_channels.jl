@@ -1,7 +1,5 @@
 # Rohan McLure, Australian National University (2019)
 # Distributed implementation of the Reduce Parallel Research Kernel
-
-using Distributed
 @everywhere using ArrayChannels
 
 function main()
