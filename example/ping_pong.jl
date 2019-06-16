@@ -11,35 +11,21 @@ function main()
     argv = map(x -> parse(Int, x), ARGS)
     iterations, payload = argv
 
-    # Setup the synchronous channel
-    @sync for proc in workers()
-        @async remotecall_wait(proc) do
-            global channel = RemoteChannel() do
-                return Channel{Vector{Float64}}(0)
-            end
-        end
-    end
-
-    # Check to see that the master process has not overwritten channel references
-    @sync for proc in workers()
-        @async remotecall_wait(proc) do
-            @assert channel.whence == myid()
-        end
-    end
+    # Setup the synchronous channels
+    channels = [
+        RemoteChannel(()->Channel{Vector{Float64}}(0), proc)
+        for proc in workers()
+    ]
 
     @sync for proc in workers()
-        @async @fetchfrom proc work(iterations, payload)
+        @spawnat proc work(iterations, payload, channels)
     end
 end
 
-@everywhere function reference_channel()
-    return channel
-end
-
-@everywhere function work(iterations, payload)
+@everywhere function work(iterations, payload, channels)
     partner_rank = if (myid() == 2) 3 else 2 end
-    local_channel_ref = channel
-    other_channel_ref = @fetchfrom partner_rank reference_channel()
+    local_channel_ref = channels[myid()-1]
+    other_channel_ref = channels[partner_rank-1]
 
     vector = Vector{Float64}(undef, payload)
 

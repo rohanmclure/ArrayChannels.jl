@@ -117,20 +117,20 @@ end
             t0 = time_ns()
         end
 
-        do_transpose!(local_frame_A, local_frame_B, width_local)
+        # do_transpose!(local_frame_A, local_frame_B, width_local)
 
         for phase in 1 : n-1
             send_idx = (id-2 + phase) % n + 1
             recv_idx = (id-2 + n - phase) % n + 1
 
             frame = view(A, (send_idx-1)*width_local+1:send_idx*width_local, :)
-            write_block!(frame, out_data, width_local)
+            # write_block!(frame, out_data, width_local)
 
             @sync begin
                 @async begin
                     frame = view(B, (recv_idx-1)*width_local+1:recv_idx*width_local, :)
                     take!(inbox, recv_idx+1)
-                    frame .+= in_data
+                    # frame .+= in_data
                 end
                 @async begin
                     put!(outbox, send_idx+1, in_rrid)
