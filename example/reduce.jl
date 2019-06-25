@@ -34,7 +34,7 @@ function main()
     if abs(value - ground_truth) <= 1.e-8
         println("Solution validates")
     else
-        println("Value provided: $value")
+        println("Value provided: $value, expected: $ground_truth")
     end
     avgtime = time / iterations
     throughput = 1.e-6 * (2.0*ranks-1.0)*payload/avgtime
@@ -49,27 +49,34 @@ end
     local_sum = fill(1.0, payload)
     constant_vector = fill(1.0, payload)
 
+    # Setup for tree topology
+    n = nworkers()
+    pow_2 = 2^Int(ceil(log(2,n))) # Smallest power of two ≤
+    lowest_z = pow_2 - nworkers() + 1
+
     local t0, t1
-    for k in 0:iterations
-        if k == 1
+    for it in 0:iterations
+        if it == 1
             t0 = time_ns()
         end
         local_sum .+= constant_vector
 
         # Assign the accumulator
         if myid() == 2
-            accumulator = copy(local_sum)
-        else
             accumulator = local_sum
+        else
+            accumulator = copy(local_sum)
         end
         id_index = myid() - 1
         # z is the relative position variable in the reduction
-        z = nprocs() - myid() + 1
+        pos = z = pow_2 - myid() + 2
         k = 0 # offset for who to collect from next
         while z % 2 == 0
-            c = channels[id_index + 2^k]
-            incoming = take!(c)
-            accumulator .+= incoming
+            if pos - 2^k >= lowest_z
+                c = channels[id_index + 2^k]
+                incoming = take!(c)
+                accumulator .+= incoming
+            end
             z ÷= 2
             k += 1
         end

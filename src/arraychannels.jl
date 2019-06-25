@@ -117,7 +117,7 @@ put! initiates two blocking remotecalls for each worker in the workerpool. The f
 """
 function put!(ac::ArrayChannel, send_to::Int64, tag::Union{RRID, Nothing}=nothing)
     same_channel = tag === nothing
-    # lock(ac.lock) do
+    lock(ac.lock) do
         id = same_channel ? ac.rrid : (tag::RRID)
         place = ac.buffer
         remotecall_wait(send_to, id, myid()) do rrid, my_pid
@@ -135,7 +135,7 @@ function put!(ac::ArrayChannel, send_to::Int64, tag::Union{RRID, Nothing}=nothin
             # Target another channel's buffer by anonymously altering the buffer metadata
             target(place, send_to, 0, tag)
         end
-    # end
+    end
 end
 
 """
@@ -146,9 +146,9 @@ take! signals to the other owners of the ArrayChannel the intention to overwrite
 function take!(ac::ArrayChannel, recv_from::Int64)
     # Accept any code
     take!(ac.cond_take, recv_from)
-    # lock(ac.lock) do
+    lock(ac.lock) do
         take!(ac.cond_put)
-    # end
+    end
     return ac
 end
 
@@ -180,7 +180,7 @@ julia> reduce!(+, A, 1)
 ```
 """
 function reduce!(op, ac::ArrayChannel, root::Int64)
-    # lock(ac.lock) do
+    lock(ac.lock) do
         peers = ac.participants
         n = length(peers)
         pow_2 = 2^Int(ceil(log(2,n))) # Smallest power of two ≤
@@ -229,7 +229,7 @@ function reduce!(op, ac::ArrayChannel, root::Int64)
                 target(ac.scratch1, send_to, 2)
             end
         end
-    # end
+    end
 end
 
 """
