@@ -1,0 +1,12 @@
+Performance outcomes for numerical codes involving large data
+manipulation depend on the access patterns of memory, known as access
+locality. We introduce the \texttt{ArrayChannels.jl} library for
+manipulation of distributed array data with considerations to cache
+utilisation patterns. The library provides an accessible toolset for
+constructing array manipulation codes by providing abstractions for
+explicit communication. In contrast to communication constructs
+implemented by Julia's \texttt{remotecall}, communication in
+\texttt{ArrayChannels.jl} occurs entirely in-place. We evaluate the
+performance of \texttt{ArrayChannels.jl} constructs relative to
+comparable MPI and \texttt{Distributed.jl} implementations of the Intel
+Parallel Research Kernels, yielding improvements of up to 150\%.

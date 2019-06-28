@@ -1,0 +1,97 @@
+\label{sec:arraychannels}
+
+The \texttt{ArrayChannels.jl} library provides synchronous, in-place
+communication options for message passing, utilising rendezvous message
+passing. This is achieved by providing an \texttt{ArrayChannel}
+construct encapsulating a template for the forms of array communciation
+that must occur. Constructing an \texttt{ArrayChannel} will require
+specification of the processes that must participate in relevant
+communication events. Each participating process will allocate a buffer
+of the same fixed size that will be reused for all communication tasks.
+
+In distributed computation tasks that depend on data to be received as
+messages from other processes, reuse of the same message buffers
+improves temporal locality. This in turn causes the receiving new
+messages and acting upon message contents to be more likely to occur in
+cache and with fewer cache misses.
+
+\subsection{Point-to-Point}
+\label{sec:p2p}
+
+For point to point communication, we provide two commands, \texttt{put!}
+and \texttt{take!} which allow processes to send messages to or receive
+from a specified process. In code snippet~\ref{code:put-take}, process
+one creates an \texttt{ArrayChannel} to facilitate communication between
+worker processes. By using a remote call, the programmer may initiate
+communication by passing the \texttt{ArrayChannel} as parameters to the
+remotecall. \texttt{ArrayChannel} constructs associate with different
+data buffers depending on which process interacts with the reference.
+
+\begin{figure}[htb]
+  \begin{lstlisting}[language=Julia]
+# 10 x 10 buffer
+AC = ArrayChannel(Float64, workers(), 10, 10)
+
+@sync begin
+  @spawnat 2 begin
+    fill!(AC, 1.0)
+    put!(AC, 3)
+  end
+  @spawnat 3 begin
+    take!(AC, 2)
+    @assert AC[1,1] = 1.0
+  end
+end
+  \end{lstlisting}
+  \caption{Message of 10 x 10 matrix of ones sent via point-to-point messaging}
+  \label{code:put-take}
+\end{figure}
+
+\texttt{put!} and \texttt{take!} operations will block until all buffer
+contents have been communicated and written at the recipient's buffer.
+As with the synchronous communication mode with \texttt{RemoteChannel}
+objects applied to array parameters. \texttt{ArrayChannels.jl} will
+simply take the contents of the input buffer and deposit them in the
+output buffer at the recipient process, using the same buffer for each
+successive communication operation for improved temporal locality.
+
+\subsection{Reduction}
+\label{sec:reduce}
+
+All participants in the underlying \texttt{ArrayChannel} must signal
+their intent on initiating a reduction by calling \texttt{reduce!} on
+the remote channel reference, supplying the reduction operator and
+`root' process which will receive the resultant data. In figure~\ref{code:reduce}, the master process initialises an
+\texttt{ArrayChannel} for the worker processes, and then causes each
+participating process to signal for a sum reduction on their local data,
+directing the result towards process two. After this reduction has taken
+place, only process two's data will be modified. \texttt{reduce!} will
+block so long as the calling process is still required to facilitate the
+reduction under the current topology.
+
+\begin{figure}[htb]
+  \begin{lstlisting}[language=Julia]
+AC = ArrayChannel(Int64, workers(), 10)
+@sync for proc in workers()
+  @spawnat proc begin
+    fill!(AC, 1)
+    reduce!(+, AC, 2)
+  end
+end
+@assert @fetchfrom 2 AC[1,1] == nworkers()
+  \end{lstlisting}
+  \caption{Sum reduce of vectors residing on five worker processes}
+  \label{code:reduce}
+\end{figure}
+
+We implement the tree topology for \texttt{reduce!}, targetting
+hierarchical network topologies for distributed clusters. The
+\texttt{reduce!} function is defined itself in terms of point-to-point
+communication, where processes determine their position in the reduction
+topology depending on their process identifier. Since the method is only
+intended to alter data residing at the root process, we retain two
+buffers in addition to the main \texttt{ArrayChannel} buffer for use in
+reduction operations in storing auxilliary results.
+
+\subsection{Scatter / Gather}
+\label{sec:scatter-gather}

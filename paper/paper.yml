@@ -1,0 +1,17 @@
+title: "Locality-Aware Message Passing with ArrayChannels.jl"
+keywords:
+  - Distributed
+  - Access Locality
+  - HPC
+authors:
+  - name: Rohan McLure
+    orcid: 0000-0002-7018-5501
+    affiliation: 1
+  - name: Josh Milthorpe
+    orcid: 0000-0002-3588-9896
+    affiliation: 1
+affiliations:
+  - name: Research School of Computer Science, Australian National University, Canberra
+    index: 1
+date: 22 July 2019
+bibliography: ref.bib
