@@ -95,14 +95,38 @@ reduction operations in storing intermediate results.
 \subsection{Scatter / Gather}
 \label{sec:scatter-gather}
 
-The scatter / gather pattern differs from point-to-point communication and reduction in that all processes, not just those participating in the \texttt{ArrayChannel} may receive and send messages through this mode. Within a `scatter!` operation, a master node will allocate disjoint regions of its local data for communication with some specified worker processes. Every invocation of `scatter!` will block the caller until the processes have completed receiving the data. Conversely, a `gather!` operation causes the master process to wait for workers to send back regions of array data that match the specified directions.
+The scatter / gather pattern differs from point-to-point communication and reduction in that all processes, not just those participating in the \texttt{ArrayChannel} may receive and send messages through this mode. Within a \texttt{scatter!} operation, a master node will allocate disjoint regions of its local data for communication with some specified worker processes. Every invocation of \texttt{scatter!} will block the caller until the processes have completed receiving the data. Conversely, a \texttt{gather!} operation causes the master process to wait for workers to send back regions of array data that match the specified directions.
 
 \begin{figure}[htb]
 	\begin{lstlisting}[language=Julia]
-		
+X = ArrayChannel(Int64, [1], 10, 10)
+
+dim_map = x -> (x-1)*2+1 : x*2
+@assert nworkers() == 5
+
+@sync begin
+  @async begin
+	scatter!(X, workers(), dim_map)
+	gather!(X, workers(), dim_map)
+  end
+  for proc in workers()
+	@spawnat proc begin
+  	  # Specify who to accept a scatter from
+      local_data = scatter_accept(X, 1) 
+      local_data[1] = myid()
+      gather_back(X, local_data)
+	end
+  end
+end
+
+# Ensure data changes have been enacted
+for (i, proc) in enumerate(workers())
+	@assert X[1, 2*(proc-1)] == workers()[i]
+end
+
 	\end{lstlisting}
-	\caption{Both scatter and gather patterns at work.}
-	\label{code:scatter-gather
+	\caption{Both scatter and gather patterns at work}
+	\label{code:scatter-gather}
 \end{figure}
 
-In code snippet \ref{code:scatter-gather}
+In code snippet~\ref{code:scatter-gather}, the master process initiates both a \texttt{scatter!} to each of its five worker processes, giving to each process two columns of a matrix. Each worker will receive its local portion, and then write into it their process identifier. Finally, the master process will receive back each worker's array data, and assert that the anticipated changes have been made.
