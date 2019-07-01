@@ -1,43 +1,34 @@
 The Julia language offers many conveniences to the development of
-numerical codes that are geered towards performance. Julia favours rapid
-prototyping by adopting a highly optimised JIT compilation approach to
+numerical codes that are geared towards performance. Julia favours rapid
+prototyping by adopting a highly optimised \textit{JIT} compilation approach to
 program execution, as well as the convenience of dynamic dispatch for
 user-made functions. The implicit vectorisation of codes massively
 accelerates the performance of user-defined array access codes.
 
-The suitibility of the language for HPC applications will nonetheless
+The suitability of the language for HPC applications will nonetheless
 continue to hang on the ability of programmers to deliver strong
 parallel performance with relative ease. Throughout this article, the
 particular form of parallelism that we refer to is distributed
-computing. While increased support for multiprocessing in the language
-can definitely increase the impact of the Julia language by targetting
-many-core systems, distributed constructs can be even further-reaching
-in their ability to target arbritrarily-large computation tasks that are
-traditionally approached with \texttt{MPI} (run-on).
+computing. While multiprocessors provide a high degree of parallelism, distributed clusters can provide extremely high performance scalability. Targeting many-core systems can serve to increase the impact of the Julia language for HPC.
 
 We produce the \texttt{ArrayChannels.jl} library, covering a variety of
 parallelism patterns operating on arrays in a distributed computing
 context, all while guaranteeing the programmer improved access locality
-over default Julia constructs. By analogy to the \texttt{RemoteChannel}
-construct, representing a distributed reference to a communication
-channel residing on a particular node, an \texttt{ArrayChannel}
-references immutable (careful here) memory buffers on some subset of the
-available nodes, as well as communication primatives relating the
-buffers (run-on). Since an \texttt{ArrayChannel} holds reference to
-specific data regions, all communication primatives between these
+over default Julia constructs. Much like how a \texttt{RemoteChannel} will reference a channel residing at a particular process, \texttt{ArrayChannel} constructs reference persistent data buffers to facilitate cache-aware communication.
+All communication primitives between these
 constructs occur synchronously and in-place. In-place communication
 causes the manipulation of message contents following arrival to be more
 efficient by increasing cache locality and so reducing the impact of
-memory latencies. We briefly discuss the impacts of access locality in
-section~\ref{sec:access-locality}
+memory latency. We briefly discuss the ramifications of access locality in
+\S~\ref{sec:access-locality}
 
 We evaluate the performance outcomes of using \texttt{ArrayChannels.jl}
-relative to default Julia \texttt{Distributed.jl} constructs and the
-equivalent constructs in \texttt{MPI}. We use a subset of the Intel
+relative to the Julia \texttt{Distributed.jl} library and
+equivalent MPI constructs. We use a subset of the Intel
 Parallel Research Kernels to obtain performance readings for both
-many-core and many-node trials on HPC harware.
+many-core and many-node trials on HPC hardware.
 
-In addition to performance benefits, in section~\ref{sec:arraychannels}
+In addition to performance benefits, in \S~\ref{sec:arraychannels}
 we demonstrate how \texttt{ArrayChannels.jl} may be used to effectively
 generate distributed codes concerning array-manipulation with a higher
-degree of productivity than current Julia primatives.
+degree of productivity than current Julia primitives.

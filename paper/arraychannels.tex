@@ -3,7 +3,7 @@
 The \texttt{ArrayChannels.jl} library provides synchronous, in-place
 communication options for message passing, utilising rendezvous message
 passing. This is achieved by providing an \texttt{ArrayChannel}
-construct encapsulating a template for the forms of array communciation
+construct encapsulating a template for the forms of array communication
 that must occur. Constructing an \texttt{ArrayChannel} will require
 specification of the processes that must participate in relevant
 communication events. Each participating process will allocate a buffer
@@ -18,7 +18,7 @@ cache and with fewer cache misses.
 \subsection{Point-to-Point}
 \label{sec:p2p}
 
-For point to point communication, we provide two commands, \texttt{put!}
+For point-to-point communication, we provide two commands, \texttt{put!}
 and \texttt{take!} which allow processes to send messages to or receive
 from a specified process. In code snippet~\ref{code:put-take}, process
 one creates an \texttt{ArrayChannel} to facilitate communication between
@@ -49,11 +49,10 @@ end
 
 \texttt{put!} and \texttt{take!} operations will block until all buffer
 contents have been communicated and written at the recipient's buffer.
-As with the synchronous communication mode with \texttt{RemoteChannel}
-objects applied to array parameters. \texttt{ArrayChannels.jl} will
+\texttt{ArrayChannels.jl} will then
 simply take the contents of the input buffer and deposit them in the
 output buffer at the recipient process, using the same buffer for each
-successive communication operation for improved temporal locality.
+successive communication operation for improved temporal locality. 
 
 \subsection{Reduction}
 \label{sec:reduce}
@@ -91,7 +90,19 @@ communication, where processes determine their position in the reduction
 topology depending on their process identifier. Since the method is only
 intended to alter data residing at the root process, we retain two
 buffers in addition to the main \texttt{ArrayChannel} buffer for use in
-reduction operations in storing auxilliary results.
+reduction operations in storing intermediate results.
 
 \subsection{Scatter / Gather}
 \label{sec:scatter-gather}
+
+The scatter / gather pattern differs from point-to-point communication and reduction in that all processes, not just those participating in the \texttt{ArrayChannel} may receive and send messages through this mode. Within a `scatter!` operation, a master node will allocate disjoint regions of its local data for communication with some specified worker processes. Every invocation of `scatter!` will block the caller until the processes have completed receiving the data. Conversely, a `gather!` operation causes the master process to wait for workers to send back regions of array data that match the specified directions.
+
+\begin{figure}[htb]
+	\begin{lstlisting}[language=Julia]
+		
+	\end{lstlisting}
+	\caption{Both scatter and gather patterns at work.}
+	\label{code:scatter-gather
+\end{figure}
+
+In code snippet \ref{code:scatter-gather}
