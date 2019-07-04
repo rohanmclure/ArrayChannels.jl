@@ -8,7 +8,7 @@ import Core
 
 # Dependency unqualified imports
 import Base: ReentrantLock
-import Distributed: RRID, WorkerPool, @spawnat, @fetchfrom, @everywhere, nprocs, procs, myid, remotecall_wait, remotecall_fetch, copy!
+import Distributed: RRID, WorkerPool, @spawnat, @fetchfrom, @everywhere, nprocs, procs, myid, remotecall_wait, remotecall_fetch, copy!, axes
 import Serialization: AbstractSerializer, serialize, deserialize, serialize_cycle_header, serialize_type, writetag, deserialize_fillarray!, AbstractSerializer, OBJECT_TAG
 import Base: AbstractChannel, put!, take!, size, show, getindex, setindex!, fill!, length, broadcast, broadcast!, iterate
 
@@ -20,7 +20,7 @@ export
     reduce!,
     getindex,
     setindex!,
-    fill!
+    get_local_data
 
 include("inplacearray.jl")
 include("arraychannels.jl")

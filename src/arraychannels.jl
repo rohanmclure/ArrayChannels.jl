@@ -115,7 +115,10 @@ end
 
 put! initiates two blocking remotecalls for each worker in the workerpool. The first waits on the receiver to authorises the buffer to be overwritten, the second writes the data.
 """
-function put!(ac::ArrayChannel, send_to::Int64, tag::Union{RRID, Nothing}=nothing)
+function put!(ac::ArrayChannel, send_to::Int64, tag::Union{ArrayChannel, RRID, Nothing}=nothing)
+    if tag isa ArrayChannel
+        tag = tag.rrid
+    end
     same_channel = tag === nothing
     lock(ac.lock) do
         id = same_channel ? ac.rrid : (tag::RRID)
@@ -267,6 +270,15 @@ end
 
 function copy!(dest::AbstractArray, AC::ArrayChannel)
     copy!(dest, AC.buffer.src)
+end
+
+function axes(AC::ArrayChannel)
+    buffer = AC.buffer.src
+    buffer === nothing ? nothing : axes(buffer)
+end
+
+function get_local_data(AC::ArrayChannel)
+    return AC.buffer.src
 end
 
 function getindex(ac::ArrayChannel, keys...)
