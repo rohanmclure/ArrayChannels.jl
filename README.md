@@ -1,3 +1,5 @@
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/rohanmclure/ArrayChannels.jl/master)
+
 # ArrayChannels.jl
 
 ## Cache Locality
