@@ -8,11 +8,28 @@ This allows for increased cache locality on distributed workloads. Using `Remote
 
 ## Running
 
-During development, you may use `julia -p n --load preload.jl` to experiment with the `ArrayChannels.jl` library. This will precompile dependencies and provide an environment with `n` processes where you will be able to import the library constructs.
+During development, `ArrayChannels` may be imported by directly cloning this repository, and then using `Pkg` to stage the local repository for development.
 
-If you wish to run the unit and integration testing suite before you launch an instance of `ArrayChannels.jl`, instead run `julia -p n --load preload_tests.jl`.
+```sh
+> git clone git@github.com:rohanmclure/ArrayChannels.jl.git
+> julia
+julia> ]
+Pkg> activate .
+Pkg> resolve
+> julia
+julia> ]
+Pkg> add Distributed Serialization Sockets
+Pkg> dev .
+```
 
 Afterwards, you may import `ArrayChannels` on all processes by running `@everywhere using ArrayChannels`.
+
+Alternatively, you may build the Docker image and create a container instance for a Jupyter environment.
+
+```sh
+docker build . -t arraychannels
+docker run --rm -it -p 8888:8888 --net=host arraychannels
+```
 
 ## Supported Patterns
 
