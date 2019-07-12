@@ -37,7 +37,7 @@ Alternatively, you may build the Docker image and create a container instance fo
 
 ```sh
 docker build . -t arraychannels
-docker run --rm -it arraychannels jupyter notebook --ip=0.0.0.0 --port=8888
+docker run -p 0.0.0.0:8888:8888 --rm -it arraychannels jupyter notebook --ip=0.0.0.0 --port=8888
 ```
 
 ## Supported Patterns
