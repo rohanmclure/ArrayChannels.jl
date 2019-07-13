@@ -7,8 +7,7 @@ RUN python3 -m pip install jupyter
 RUN useradd -m jupyter
 
 # Install ArrayChannels
-ADD . /home/jupyter/arraychannels
-RUN chown jupyter /home/jupyter/arraychannels /home/jupyter/arraychannels/*
+COPY . /home/jupyter/arraychannels
 USER jupyter
 WORKDIR /home/jupyter/arraychannels
 RUN julia -e "using Pkg; Pkg.add(\"IJulia\"); using IJulia"
