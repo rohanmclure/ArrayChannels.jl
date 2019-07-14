@@ -8,10 +8,10 @@ RUN useradd -m jupyter
 
 # Install ArrayChannels
 USER jupyter
-COPY --chown=jupyter . /home/jupyter/arraychannels
-WORKDIR /home/jupyter/arraychannels
+COPY --chown=jupyter . /home/jupyter/ArrayChannels
+WORKDIR /home/jupyter/
 RUN julia -e "using Pkg; Pkg.add(\"IJulia\"); using IJulia"
-RUN julia -e "using Pkg; Pkg.activate(\".\"); Pkg.resolve()"
-RUN julia -e "using Pkg; Pkg.add(\"Distributed\"); Pkg.add(\"Serialization\"); Pkg.add(\"Sockets\"); Pkg.develop(PackageSpec(path=\".\")); using ArrayChannels"
+RUN julia -e "using Pkg; Pkg.activate(\"./ArrayChannels\"); Pkg.resolve()"
+RUN julia -e "using Pkg; Pkg.add(\"Distributed\"); Pkg.add(\"Serialization\"); Pkg.add(\"Sockets\"); Pkg.develop(PackageSpec(path=\"./ArrayChannels\")); using ArrayChannels"
 
 EXPOSE 8888
