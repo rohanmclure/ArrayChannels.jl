@@ -13,15 +13,22 @@ This allows for increased cache locality on distributed workloads. Using `Remote
 During development, `ArrayChannels` may be imported by directly cloning this repository, and then using `Pkg` to stage the local repository for development.
 
 ```sh
-> git clone git@github.com:rohanmclure/ArrayChannels.jl.git
+> git clone git@github.com:rohanmclure/ArrayChannels.jl.git ArrayChannels
 > julia
 julia> ]
-Pkg> activate .
+Pkg> activate ./ArrayChannels
 Pkg> resolve
 > julia
 julia> ]
 Pkg> add Distributed Serialization Sockets
-Pkg> dev .
+Pkg> dev ./ArrayChannels
+```
+
+To run the package tests, simply use the following after installation:
+
+```sh
+julia> ]
+Pkg> test ArrayChannels
 ```
 
 Afterwards, you may import `ArrayChannels` on all processes by running `@everywhere using ArrayChannels`.
