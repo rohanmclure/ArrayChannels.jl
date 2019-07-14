@@ -33,6 +33,14 @@ Pkg> test ArrayChannels
 
 Afterwards, you may import `ArrayChannels` on all processes by running `@everywhere using ArrayChannels`.
 
+To test the package, simply use the interface provided in `Pkg`.
+
+```sh
+> julia
+julia> ]
+Pkg> test ArrayChannels
+```
+
 Alternatively, you may build the Docker image and create a container instance for a Jupyter environment.
 
 ```sh
