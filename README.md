@@ -52,7 +52,7 @@ docker run -p 0.0.0.0:8888:8888 --rm -it arraychannels jupyter notebook --ip=0.0
 
 ### Send / Receive
 
-The most essential pattern is the synchronous send / receive pattern. It takes the form of two function calls, `put!` and `take!`. Once we have written to an array, we may update the contents of all local arrays at participating processes via a pair of `put!` and `take!` operations.
+The most essential pattern is the synchronous send / receive pattern. It takes the form of two function calls, `put!` and `take!`. After initialising the array data, the contents of the array may be synchronously sent and received my participating process via matching pair of `put!` and `take!` calls.
 
 ```julia
 @everywhere using ArrayChannels
@@ -84,10 +84,9 @@ Where dimensions match, the sending process may elect to specify the output chan
 # From process one
 A = ArrayChannel(Float64, [1,2], 10, 2)
 B = ArrayChannel(Float64, [1,2], 10, 2)
-target_rrid = B.rrid
 
 @sync begin
-    @async put!(A, 2, target_rrid)
+    @async put!(A, 2, B)
     @spawnat 2 take!(B, 1)
 end
 ```
