@@ -108,9 +108,9 @@ communication of data between processes in a parallel computation. This
 methodology is particularly useful when there is no notion of shared
 memory between processes, as in the case of distributed computing. Julia
 implements message passing through its \texttt{Distributed.jl} module in
-the standard library. The two main primitives available to the user are
-remote calls, as well as \texttt{Future} objects. Processes may message
-one another by means of a remote procedure call, whereby parameters to
+the standard library. The two main primitives available to the user are the
+\texttt{remotecall}, as well as \texttt{Future} objects. Processes may message
+one another by means of a remote procedure call, whereby arguments to
 the remote call and other captured variables are communicated to the
 recipient process. A \texttt{Future} fulfils the synchronising role of
 a remote call, encapsulating the completion state of function in
@@ -166,7 +166,7 @@ occur at a particular time (namely, following a successful handshake),
 the receiving process may offer in their intention to receive a preferred
 buffer which may be written to directly after synchronisation. In this
 way, rendezvous message passing may be used to avoid an extraneous
-memory copy, at the cost of additional synchronisation. While frameworks such as `Distributed.jl` that utilise eager message passing may omit the memory copy step, this mode will reduced temporal locality, as new buffers must be selected between communication events.
+memory copy, at the cost of additional synchronisation. While frameworks such as \texttt{Distributed.jl} that utilise eager message passing may omit the memory copy step, this mode will reduced temporal locality, as new buffers must be selected between communication events.
 
 \begin{figure}[htb]
 	\includegraphics[width=\linewidth]{figs/Rendezvous.pdf}
@@ -218,14 +218,14 @@ provided so as to provide each core with some local computation.
 
 \begin{figure}[htb]
 	\includegraphics[width=\linewidth]{figs/Reduce.pdf}
-	\caption{Reduce kernel}
+	\caption{Distributed reduce kernel}
 	\label{fig:reduce-diagram}
 \end{figure}
 
 In a distributed context, this is accomplished by allocating two large
 vectors at each locale, computing the local sum and then performing a
-distributed reduction on the resultant vector. In MPI, this is
-facilitated by directly by the \texttt{MPI\_Reduce} directive, which
+distributed reduction on the resultant vector. In figure~\ref{fig:reduce-diagram}, reduction occurs in stages occuring at different compute nodes for improved parallelism. In MPI, this is
+facilitated directly by the \texttt{MPI\_Reduce} directive, which
 causes the MPI runtime to conduct the parallel reduction with a single
 destination rank using whichever topology it deems most suitable. As the
 MPI Reduce implementation performs its work in place, our equivalent
@@ -242,10 +242,11 @@ representation of a dense matrix so that columns are stored in the row
 format and vice versa. In a distributed context, where the matrix is
 fragmented among different locales, the transpose of a pair of indices
 may belong to a different locale, and as such data communication is
-required. In practise, the matrices are distributed into `column
-blocks', with one column block given to each process. Figure~\ref{fig:transpose-diagram} demonstrates how off-diagonal regions of
+required. In practise, the matrices are distributed into "column
+blocks", with one column block given to each process. Figure~\ref{fig:transpose-diagram} demonstrates how off-diagonal regions of
 column blocks must be communicated with other processes at each
-iteration.
+iteration. The colours represent the distribution of data between workers.
+Arrows connecting differently-coloured regions indicate that communication must occur between the owners of the regions.
 
 \begin{figure}[htb]
 	\includegraphics[width=\linewidth]{figs/Transpose.pdf}
@@ -268,7 +269,7 @@ kernel may be parallelised by decomposing the source matrix into square
 blocks and distributing each block to a different worker process.
 Applying the stencil operator to indices that border the divisions will
 require the acquisition of data from neighbouring processes, as depicted
-in figure~\ref{fig:stencil-diagram}.
+in figure~\ref{fig:stencil-diagram}. In the diagram, colours are used to represent the distribution of matrix data, and green subregions represent the communication boundaries.
 
 \begin{figure}[htb]
 	\includegraphics[width=\linewidth]{figs/Stencil.pdf}
@@ -277,7 +278,7 @@ in figure~\ref{fig:stencil-diagram}.
 \end{figure}
 
 The regions of data dependencies that lie on the borders between locales
-are known as ghost regions. A parameter known as the stencil radius
+are known as "ghost regions". A parameter known as the "stencil radius"
 determines the width of these ghost regions, and so total amount of data
 to be communicated increases linearly with respect to the order of the
 matrix. Unlike the transpose kernel, the stencil kernel requires the
@@ -298,37 +299,37 @@ of the same fixed size that will be reused for all communication tasks.
 
 In distributed computation tasks that depend on data to be received as
 messages from other processes, reuse of the same message buffers
-improves temporal locality. This in turn causes the receiving new
-messages and acting upon message contents to be more likely to occur in
+improves temporal locality. This in turn causes the receiving of new
+messages and actions upon message contents to be more likely to occur in
 cache and with fewer cache misses.
 
 \subsection{Point-to-Point}
 \label{sec:p2p}
 
 For point-to-point communication, we provide two commands, \texttt{put!}
-and \texttt{take!} which allow processes to send messages to or receive
-from a specified process. In code snippet~\ref{code:put-take}, process
-one creates an \texttt{ArrayChannel} to facilitate communication between
+and \texttt{take!}, which allows processes to send messages to, or receive
+from, a specified process. In code snippet~\ref{code:put-take}, \textbf{process
+1} creates an \texttt{ArrayChannel} to facilitate communication between
 worker processes. By using a remote call, the programmer may initiate
-communication by passing the \texttt{ArrayChannel} as parameters to the
-remotecall. \texttt{ArrayChannel} constructs associate with different
+communication by passing the \texttt{ArrayChannel} as arguments to an invocation of either
+\texttt{put!} and \texttt{take!}. \texttt{ArrayChannel} constructs associate with different
 data buffers depending on which process interacts with the reference.
 
 \begin{figure}[htb]
 	\begin{lstlisting}[language=Julia]
-	# 10 x 10 buffer
-	AC = ArrayChannel(Float64, workers(), 10, 10)
-	
-	@sync begin
+# 10 x 10 buffer
+AC = ArrayChannel(Float64, workers(), 10, 10)
+
+@sync begin
 	@spawnat 2 begin
-	fill!(AC, 1.0)
-	put!(AC, 3)
+		fill!(AC, 1.0)
+		put!(AC, 3)
 	end
 	@spawnat 3 begin
-	take!(AC, 2)
-	@assert AC[1,1] = 1.0
+		take!(AC, 2)
+		@assert AC[1,1] = 1.0
 	end
-	end
+end
 	\end{lstlisting}
 	\caption{Message of 10 x 10 matrix of ones sent via point-to-point messaging}
 	\label{code:put-take}
@@ -339,7 +340,7 @@ contents have been communicated and written at the recipient's buffer.
 \texttt{ArrayChannels.jl} will then
 simply take the contents of the input buffer and deposit them in the
 output buffer at the recipient process, using the same buffer for each
-successive communication operation for improved temporal locality. 
+successive communication operation for improved temporal locality.
 
 \subsection{Reduction}
 \label{sec:reduce}
@@ -350,21 +351,21 @@ the remote channel reference, supplying the reduction operator and
 `root' process which will receive the resultant data. In figure~\ref{code:reduce}, the master process initialises an
 \texttt{ArrayChannel} for the worker processes, and then causes each
 participating process to signal for a sum reduction on their local data,
-directing the result towards process two. After this reduction has taken
-place, only process two's data will be modified. \texttt{reduce!} will
+directing the result towards \textbf{process 2}. After this reduction has taken
+place, only \textbf{process 2}'s data will be modified. \texttt{reduce!} will
 block so long as the calling process is still required to facilitate the
 reduction under the current topology.
 
 \begin{figure}[htb]
 	\begin{lstlisting}[language=Julia]
-	AC = ArrayChannel(Int64, workers(), 10)
-	@sync for proc in workers()
+AC = ArrayChannel(Int64, workers(), 10)
+@sync for proc in workers()
 	@spawnat proc begin
-	fill!(AC, 1)
-	reduce!(+, AC, 2)
+		fill!(AC, 1)
+		reduce!(+, AC, 2)
 	end
-	end
-	@assert @fetchfrom 2 AC[1,1] == nworkers()
+end
+@assert @fetchfrom 2 AC[1,1] == nworkers()
 	\end{lstlisting}
 	\caption{Sum reduce of vectors residing on five worker processes}
 	\label{code:reduce}
@@ -386,31 +387,30 @@ The scatter / gather pattern differs from point-to-point communication and reduc
 
 \begin{figure}[htb]
 	\begin{lstlisting}[language=Julia]
-	X = ArrayChannel(Int64, [1], 10, 10)
-	
-	dim_map = x -> (x-1)*2+1 : x*2
-	@assert nworkers() == 5
-	
-	@sync begin
+X = ArrayChannel(Int64, [1], 10, 10)
+
+dim_map = x -> (x-1)*2+1 : x*2
+@assert nworkers() == 5
+
+@sync begin
 	@async begin
-	scatter!(X, workers(), dim_map)
-	gather!(X, workers(), dim_map)
+		scatter!(X, workers(), dim_map)
+		gather!(X, workers(), dim_map)
 	end
 	for proc in workers()
-	@spawnat proc begin
-	# Specify who to accept a scatter from
-	local_data = scatter_accept(X, 1) 
-	local_data[1] = myid()
-	gather_back(X, local_data)
+		@spawnat proc begin
+			# Specify who to accept a scatter from
+			local_data = scatter_accept(X, 1)
+			local_data[1] = myid()
+			gather_back(X, local_data)
+		end
 	end
-	end
-	end
-	
-	# Ensure data changes have been enacted
-	for (i, proc) in enumerate(workers())
+end
+
+# Ensure data changes have been enacted
+for (i, proc) in enumerate(workers())
 	@assert X[1, 2*(proc-1)] == workers()[i]
-	end
-	
+end
 	\end{lstlisting}
 	\caption{Both scatter and gather patterns at work}
 	\label{code:scatter-gather}
