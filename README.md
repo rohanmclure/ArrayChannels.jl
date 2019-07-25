@@ -1,4 +1,5 @@
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/rohanmclure/ArrayChannels.jl/master)
+![Travis-CI](https://travis-ci.com/rohanmclure/ArrayChannels.jl.svg?branch=master)
 
 # ArrayChannels.jl
 
