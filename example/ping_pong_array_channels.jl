@@ -1,6 +1,5 @@
 using Distributed
 addprocs(2)
-@everywhere include("preload.jl")
 @everywhere using ArrayChannels
 
 function main()
